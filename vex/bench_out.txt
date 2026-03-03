@@ -1,0 +1,13 @@
+
+═══ Benchmark: examples\bench_fib.vxm ═══
+
+── Tree-Walk Interpreter ──
+832040
+  Time: 4.416000 seconds
+
+── Bytecode VM ──
+832040
+  Time: 0.113000 seconds
+
+══ Result: VM is 39.08x faster ══
+

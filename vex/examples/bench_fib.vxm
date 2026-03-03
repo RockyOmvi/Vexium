@@ -1,0 +1,7 @@
+# Benchmark — fib(30) — heavier recursion
+fn fib(n):
+    if n < 2:
+        give back n
+    give back fib(n - 1) + fib(n - 2)
+
+display fib(30)

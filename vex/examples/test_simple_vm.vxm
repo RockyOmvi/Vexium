@@ -1,0 +1,32 @@
+# Simple VM Test
+display "=== Arithmetic ==="
+display 2 + 3
+display 10 * 5
+display "=== Variables ==="
+let x be 42
+display x
+let y be x + 8
+display y
+display "=== If/Else ==="
+if 5 > 3:
+    display "yes"
+else:
+    display "no"
+display "=== While Loop ==="
+let i be 0
+let s be 0
+while i < 5:
+    s be s + i
+    i be i + 1
+display s
+display "=== Function ==="
+fn add(a, b):
+    give back a + b
+display add(10, 20)
+display "=== Recursion ==="
+fn fib(n):
+    if n < 2:
+        give back n
+    give back fib(n - 1) + fib(n - 2)
+display fib(10)
+display "=== DONE ==="

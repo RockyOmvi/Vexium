@@ -1,0 +1,147 @@
+# ═══════════════════════════════════════════════════════════════
+#  VEXIUM — Bytecode VM Test Suite
+# ═══════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════
+#  TEST 1: Basic Arithmetic
+# ═══════════════════════════════════════════════════════════════
+display "=== 1. Arithmetic ==="
+display 2 + 3
+display 10 - 4
+display 6 * 7
+display 100 / 4
+display 17 % 5
+display 2 ** 10
+
+# ═══════════════════════════════════════════════════════════════
+#  TEST 2: Variables
+# ═══════════════════════════════════════════════════════════════
+display "=== 2. Variables ==="
+let x be 42
+display x
+let name be "Vexium"
+display name
+x be 100
+display x
+
+# ═══════════════════════════════════════════════════════════════
+#  TEST 3: Comparisons & Logic
+# ═══════════════════════════════════════════════════════════════
+display "=== 3. Comparisons ==="
+display 5 > 3
+display 2 < 1
+display 5 == 5
+display 3 != 4
+display true and true
+display true and false
+display false or true
+display not false
+
+# ═══════════════════════════════════════════════════════════════
+#  TEST 4: If/Elif/Else
+# ═══════════════════════════════════════════════════════════════
+display "=== 4. Control Flow ==="
+let score be 85
+if score > 90:
+    display "A"
+elif score > 80:
+    display "B"
+elif score > 70:
+    display "C"
+else:
+    display "F"
+
+# ═══════════════════════════════════════════════════════════════
+#  TEST 5: While Loops
+# ═══════════════════════════════════════════════════════════════
+display "=== 5. While Loop ==="
+let i be 1
+let total be 0
+while i < 6:
+    total be total + i
+    i be i + 1
+display total
+
+# ═══════════════════════════════════════════════════════════════
+#  TEST 6: For Range
+# ═══════════════════════════════════════════════════════════════
+display "=== 6. For Range ==="
+let sum be 0
+for i in 1 to 11:
+    sum be sum + i
+display sum
+
+# ═══════════════════════════════════════════════════════════════
+#  TEST 7: Functions
+# ═══════════════════════════════════════════════════════════════
+display "=== 7. Functions ==="
+
+fn add(a, b):
+    give back a + b
+
+display add(3, 4)
+display add(10, 20)
+
+fn factorial(n):
+    if n < 2:
+        give back 1
+    give back n * factorial(n - 1)
+
+display factorial(5)
+display factorial(10)
+
+# ═══════════════════════════════════════════════════════════════
+#  TEST 8: Fibonacci (recursion benchmark)
+# ═══════════════════════════════════════════════════════════════
+display "=== 8. Fibonacci ==="
+
+fn fib(n):
+    if n < 2:
+        give back n
+    give back fib(n - 1) + fib(n - 2)
+
+display fib(10)
+display fib(20)
+
+# ═══════════════════════════════════════════════════════════════
+#  TEST 9: Arrays
+# ═══════════════════════════════════════════════════════════════
+display "=== 9. Arrays ==="
+let arr be [10, 20, 30, 40, 50]
+display arr
+display arr[0]
+display arr[4]
+display len(arr)
+
+push(arr, 60)
+display arr
+display len(arr)
+
+# ═══════════════════════════════════════════════════════════════
+#  TEST 10: String Operations
+# ═══════════════════════════════════════════════════════════════
+display "=== 10. Strings ==="
+let greeting be "Hello" + ", " + "World!"
+display greeting
+display len(greeting)
+
+# ═══════════════════════════════════════════════════════════════
+#  TEST 11: Nested Function Calls
+# ═══════════════════════════════════════════════════════════════
+display "=== 11. Nested Calls ==="
+
+fn double(x):
+    give back x * 2
+
+fn quadruple(x):
+    give back double(double(x))
+
+display quadruple(5)
+
+# ═══════════════════════════════════════════════════════════════
+#  TEST 12: Fibonacci(30) — Performance Test
+# ═══════════════════════════════════════════════════════════════
+display "=== 12. Fib(30) Performance ==="
+display fib(30)
+
+display "=== ALL VM TESTS PASSED ==="
