@@ -1,0 +1,43 @@
+.\vex.exe : Error 
+[line 90]: Expected 
+param name (got SELF 
+'self')
+At line:1 char:1
++ .\vex.exe run example
+s\test_lexer.vex 2>&1 
+| Out-File -Encoding 
+ascii ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (Error [line 9   
+ 0]...ot SELF 'self    
+'):String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+Error [line 90]: 
+Expected ')' after 
+method params (got 
+SELF 'self')
+Error [line 90]: 
+Expected ':' after 
+method signature (got 
+SELF 'self')
+Error [line 90]: 
+Expected indented 
+block (got SELF 'self')
+Error [line 90]: 
+Unexpected token ')'
+Error [line 90]: 
+Unexpected token ':'
+Error [line 91]: 
+Unexpected token ''
+
+Parsing failed with 
+errors.
+Parsing: examples\test_lexer.vex
+

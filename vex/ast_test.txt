@@ -1,0 +1,35 @@
+.\vex.exe : Error 
+[line 90]: Unexpected 
+token ''
+At line:1 char:1
++ .\vex.exe run example
+s\test_lexer.vex 2>&1 
+| Out-File -Encoding 
+ascii ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (Error [line 9   
+ 0]: Unexpected tok    
+en '':String) [],     
+RemoteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+Error [line 90]: 
+Unexpected token 'can'
+Error [line 90]: 
+Unexpected token ':'
+Error [line 91]: 
+Unexpected token ''
+Error [line 92]: 
+Unexpected token ''
+Error [line 92]: 
+Unexpected token ''
+
+Parsing failed with 
+errors.
+Parsing: examples\test_lexer.vex
+

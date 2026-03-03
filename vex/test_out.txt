@@ -1,0 +1,103 @@
+﻿=== 1. Dynamic Arrays ===
+[1, 2, 3, 4, 5, 6, 7, 8, 9]
+[1, 2, 3]
+[7, 8, 9]
+4
+3
+[5, 4, 3, 2, 1]
+[1, 2, 3, 4, 5]
+100
+true
+true
+=== 2. Zip & Enumerate ===
+[["Alice", 95], ["Bob", 87], ["Charlie", 92]]
+[[0, "Alice"], [1, "Bob"], [2, "Charlie"]]
+=== 3. Flatten ===
+[1, 2, 3, 4, 5, 6]
+=== 4. Algorithms ===
+5
+-1
+6
+24
+true
+false
+55
+6765
+10
+0
+5
+50
+=== 5. Two Sum ===
+[0, 1]
+[1, 2]
+=== 6. Palindrome ===
+true
+false
+true
+=== 7. Valid Parens ===
+true
+false
+true
+=== 8. Remove Duplicates ===
+[1, 2, 3, 4, 5]
+5
+=== 9. FizzBuzz ===
+[1, 2, "Fizz", 4, "Buzz", "Fizz", 7, 8, "Fizz", "Buzz", 11, "Fizz", 13, 14, "FizzBuzz", 16]
+=== 10. Single Number ===
+1
+4
+=== 11. Count Primes ===
+8
+25
+=== 12. Power ===
+1024
+243
+=== 13. Max Subarray ===
+6
+=== 14. Fibonacci Series ===
+[0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89]
+=== 15. String Ops ===
+VEXIUM BEATS PYTHON
+hello vexium
+["1", "2", "3", "4", "5"]
+1 + 2 + 3 + 4 + 5
+=== ALL LEETCODE TESTS PASSED ===
+=== Math Module ===
+4
+42
+1024
+3
+4
+4
+10
+20
+3.14159
+2.71828
+1
+=== String Module ===
+HELLO VEXIUM
+hello vexium
+hello
+true
+true
+true
+6
+hello vexium
+["a", "b", "c", "d"]
+a-b-c-d
+olleh
+v
+=== File Module ===
+true
+Hello from Vexium!
+Hello from Vexium!\nSecond line!
+=== Sys Module ===
+windows
+float
+=== Selective Import ===
+=== Combined Test ===
+31
+Sum of array: 31
+5.56776
+HELLO, BEAUTIFUL WORLD!
+=== ALL STDLIB TESTS PASSED ===

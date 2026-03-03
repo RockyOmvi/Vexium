@@ -1,0 +1,4 @@
+# Hello World in Vex!
+display "Hello, World!"
+let name be "Vex"
+display "Welcome to {name}!"
