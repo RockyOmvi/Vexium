@@ -1,0 +1,27 @@
+# Test: Defer Statements - Core Language Feature
+# Defer schedules code to run before a function returns
+
+fn cleanup_example(filename):
+    display "Opening: " + filename
+    defer display "Closing: " + filename
+    defer display "Released resources"
+    display "Processing file"
+    give back true
+
+fn test_defer():
+    display "=== Testing Defer ==="
+    result be cleanup_example("data.txt")
+    display "Result: " + type(result)
+
+fn test_multiple_defers():
+    display "=== Multiple Defers ==="
+    display "Start"
+    defer display "Cleanup 3"
+    defer display "Cleanup 2"  
+    defer display "Cleanup 1"
+    display "End"
+
+# Run tests
+test_defer()
+display ""
+test_multiple_defers()

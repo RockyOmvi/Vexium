@@ -1,0 +1,6 @@
+# Test - should work if everything is basic
+display "Hello from test"
+
+let x be 5
+let y be 10
+display x + y

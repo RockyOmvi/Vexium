@@ -4,7 +4,7 @@
 #include "common.h"
 
 /* ── Token Types ── */
-typedef enum {
+typedef enum VexiumTokenType {
     /* Literals */
     TOKEN_INT,              /* 42, 0xFF, 0b1010 */
     TOKEN_FLOAT,            /* 3.14, 1.0e10 */
@@ -22,6 +22,11 @@ typedef enum {
     TOKEN_FN,               /* fn */
     TOKEN_GIVE_BACK,        /* give back (return) */
     TOKEN_TASK,             /* task (async fn) */
+    TOKEN_SPAWN,            /* spawn (create concurrent task) */
+    TOKEN_DEFER,            /* defer */
+    TOKEN_AWAIT,            /* await */
+    TOKEN_YIELD,            /* yield (generator) */
+    TOKEN_CHANNEL,          /* channel (for concurrency) */
     TOKEN_PASS,             /* pass */
 
     /* Keywords: Control Flow */
@@ -39,6 +44,8 @@ typedef enum {
     TOKEN_BREAK,            /* break */
     TOKEN_SKIP,             /* skip (continue) */
     TOKEN_MATCH,            /* match */
+    TOKEN_WHEN,             /* when */
+    TOKEN_WHERE,            /* where */
 
     /* Keywords: Logic & Values */
     TOKEN_AND,              /* and */
@@ -56,6 +63,9 @@ typedef enum {
     TOKEN_HAS,              /* has */
     TOKEN_CAN,              /* can */
     TOKEN_SELF,             /* self */
+    TOKEN_TRAIT,            /* trait */
+    TOKEN_IMPL,             /* impl */
+    TOKEN_OPERATOR,         /* operator */
     TOKEN_ATTEMPT,          /* attempt */
     TOKEN_OTHERWISE,        /* otherwise */
     TOKEN_UNSAFE,           /* unsafe */
@@ -118,11 +128,11 @@ typedef enum {
     /* Special */
     TOKEN_EOF,              /* end of file */
     TOKEN_ERROR             /* lexer error */
-} TokenType;
+} VexiumTokenType;
 
 /* ── Token Structure ── */
 typedef struct {
-    TokenType type;
+    VexiumTokenType type;
     const char* start;     /* pointer into source string */
     int length;            /* length of the token text */
     int line;              /* 1-based line number */
@@ -130,7 +140,7 @@ typedef struct {
 } Token;
 
 /* ── Token Utilities ── */
-const char* token_type_name(TokenType type);
+const char* token_type_name(VexiumTokenType type);
 void token_print(Token token);
 
 #endif /* VEXIUM_TOKEN_H */

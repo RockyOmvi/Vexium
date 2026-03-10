@@ -112,12 +112,15 @@ typedef enum {
     SIGNAL_NONE,
     SIGNAL_BREAK,
     SIGNAL_SKIP,
-    SIGNAL_RETURN
+    SIGNAL_RETURN,
+    SIGNAL_THROW,
+    SIGNAL_YIELD
 } SignalType;
 
 typedef struct {
     SignalType type;
     VexValue return_value;
+    VexValue error_value;
 } Signal;
 
 /* ══════════════════════════════════════════════════════════════

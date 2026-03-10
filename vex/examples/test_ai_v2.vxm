@@ -1,0 +1,16 @@
+# Vexium V2 AI/ML Test
+
+# Create a neural network
+let model be neural network:
+    layer dense with 784 inputs, 256 outputs, activation is relu
+    layer dense with 256 inputs, 10 outputs, activation is softmax
+
+# Train the model
+train model on training_data:
+    epochs is 10
+    batch size is 32
+
+# Save the trained model
+save model to "classifier.vex"
+
+display "Training complete!"

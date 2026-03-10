@@ -1,0 +1,77 @@
+# Vexium String Module
+
+fn length(s):
+    give back s.length
+
+fn is_empty(s):
+    give back s.length is 0
+
+fn starts_with(s, prefix):
+    if prefix.length is greater than s.length:
+        give back false
+    for i in 0 to prefix.length - 1:
+        if s[i] is not prefix[i]:
+            give back false
+    give back true
+
+fn ends_with(s, suffix):
+    if suffix.length is greater than s.length:
+        give back false
+    let offset be s.length - suffix.length
+    for i in 0 to suffix.length - 1:
+        if s[offset + i] is not suffix[i]:
+            give back false
+    give back true
+
+fn contains(s, substr):
+    if substr.length is 0:
+        give back true
+    if substr.length is greater than s.length:
+        give back false
+    let max_i be s.length - substr.length
+    for i in 0 to max_i:
+        let found be true
+        for j in 0 to substr.length - 1:
+            if s[i + j] is not substr[j]:
+                let found be false
+                break
+        if found:
+            give back true
+    give back false
+
+fn index_of(s, substr):
+    if substr.length is 0:
+        give back 0
+    if substr.length is greater than s.length:
+        give back -1
+    let max_i be s.length - substr.length
+    for i in 0 to max_i:
+        let found be true
+        for j in 0 to substr.length - 1:
+            if s[i + j] is not substr[j]:
+                let found be false
+                break
+        if found:
+            give back i
+    give back -1
+
+fn substring(s, start, len):
+    if start is less than 0:
+        let start be 0
+    if start is greater than s.length:
+        give back ""
+    if start + len is greater than s.length:
+        let len be s.length - start
+    let result be ""
+    let end_pos be start + len
+    for i in start to end_pos - 1:
+        let result be result + s[i]
+    give back result
+
+fn reverse(s):
+    let result be ""
+    let i be s.length - 1
+    while i is greater than -1:
+        let result be result + s[i]
+        let i be i - 1
+    give back result

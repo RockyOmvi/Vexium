@@ -1,0 +1,234 @@
+# ═══════════════════════════════════════════════════════════════════
+# Neural Network Library for Vexium v1
+# Build Your Own Neural Network / GPT
+# ═══════════════════════════════════════════════════════════════════
+
+# Activation functions
+fn sigmoid(x):
+    give back 1 / (1 + math.exp(-x))
+
+fn sigmoid_derivative(x):
+    let s be sigmoid(x)
+    give back s * (1 - s)
+
+fn relu(x):
+    if x > 0:
+        give back x
+    give back 0
+
+fn relu_derivative(x):
+    if x > 0:
+        give back 1
+    give back 0
+
+fn tanh_activation(x):
+    give back math.tanh(x)
+
+fn tanh_derivative(x):
+    let t be math.tanh(x)
+    give back 1 - t * t
+
+fn softmax(arr):
+    let max_val be arr[0]
+    for i in 1 to len(arr):
+        if arr[i] > max_val:
+            set max_val be arr[i]
+    
+    let sum be 0
+    for each val in arr:
+        set sum be sum + math.exp(val - max_val)
+    
+    let result be []
+    for each val in arr:
+        append (math.exp(val - max_val) / sum) to result
+    
+    give back result
+
+
+# Matrix operations
+fn matrix_create(rows, cols, value):
+    let matrix be []
+    for i in 0 to rows:
+        let row be []
+        for j in 0 to cols:
+            append value to row
+        append row to matrix
+    give back matrix
+
+fn matrix_random(rows, cols):
+    let matrix be []
+    for i in 0 to rows:
+        let row be []
+        for j in 0 to cols:
+            let scale be math.sqrt(2.0 / (rows + cols))
+            append (math.random() * 2 - 1) * scale to row
+        append row to matrix
+    give back matrix
+
+fn matrix_zeros(rows, cols):
+    give back matrix_create(rows, cols, 0)
+
+fn matrix_add(a, b):
+    let rows be len(a)
+    let cols be len(a[0])
+    let result be matrix_zeros(rows, cols)
+    
+    for i in 0 to rows:
+        for j in 0 to cols:
+            set result[i][j] be a[i][j] + b[i][j]
+    
+    give back result
+
+fn matrix_subtract(a, b):
+    let rows be len(a)
+    let cols be len(a[0])
+    let result be matrix_zeros(rows, cols)
+    
+    for i in 0 to rows:
+        for j in 0 to cols:
+            set result[i][j] be a[i][j] - b[i][j]
+    
+    give back result
+
+fn matrix_multiply(a, b):
+    let rows_a be len(a)
+    let cols_a be len(a[0])
+    let rows_b be len(b)
+    let cols_b be len(b[0])
+    
+    if cols_a != rows_b:
+        throw "Matrix multiply error: incompatible dimensions"
+    
+    let result be matrix_zeros(rows_a, cols_b)
+    
+    for i in 0 to rows_a:
+        for j in 0 to cols_b:
+            let sum be 0
+            for k in 0 to cols_a:
+                set sum be sum + a[i][k] * b[k][j]
+            set result[i][j] be sum
+    
+    give back result
+
+fn matrix_scalar_multiply(matrix, scalar):
+    let rows be len(matrix)
+    let cols be len(matrix[0])
+    let result be matrix_zeros(rows, cols)
+    
+    for i in 0 to rows:
+        for j in 0 to cols:
+            set result[i][j] be matrix[i][j] * scalar
+    
+    give back result
+
+fn matrix_transpose(matrix):
+    let rows be len(matrix)
+    let cols be len(matrix[0])
+    let result be matrix_zeros(cols, rows)
+    
+    for i in 0 to rows:
+        for j in 0 to cols:
+            set result[j][i] be matrix[i][j]
+    
+    give back result
+
+fn matrix_dot(a, b):
+    let rows be len(a)
+    let cols be len(a[0])
+    let result be matrix_zeros(rows, cols)
+    
+    for i in 0 to rows:
+        for j in 0 to cols:
+            set result[i][j] be a[i][j] * b[i][j]
+    
+    give back result
+
+
+# Dense (Linear) Layer
+struct Dense:
+    has input_size
+    has output_size
+    has weights
+    has biases
+    has activation_fn
+    
+    fn create(input_sz, output_sz, activation):
+        self.input_size be input_sz
+        self.output_size be output_sz
+        self.activation_fn be activation
+        
+        set self.weights be matrix_random(input_sz, output_sz)
+        set self.biases be matrix_zeros(1, output_sz)
+    
+    fn forward(input):
+        let input_matrix be [input]
+        if len(input) == self.input_size:
+            set input_matrix be [input]
+        
+        let z be matrix_multiply(input_matrix, self.weights)
+        set z be matrix_add(z, self.biases)
+        
+        let output be []
+        for each row in z:
+            for j in 0 to self.output_size:
+                if self.activation_fn == "sigmoid":
+                    append sigmoid(row[j]) to output
+                elif self.activation_fn == "relu":
+                    append relu(row[j]) to output
+                elif self.activation_fn == "tanh":
+                    append tanh_activation(row[j]) to output
+                elif self.activation_fn == "none":
+                    append row[j] to output
+                else:
+                    append row[j] to output
+        
+        give back output
+    
+    fn get_weights():
+        give back self.weights
+    
+    fn set_weights(new_weights):
+        set self.weights be new_weights
+# Neural Network Model
+struct NeuralNetwork:
+    has layers
+    has learning_rate
+    
+    fn create(learning_rate):
+        set self.learning_rate be learning_rate
+        set self.layers be []
+    
+    fn add_layer(layer):
+        append layer to self.layers
+    
+    fn predict(input):
+        let current be input
+        for each layer in self.layers:
+            set current be layer.forward(current)
+        give back current
+    
+    fn train(inputs, outputs, epochs):
+        display "Training neural network..."
+        display "Epochs: " + str(epochs)
+        
+        for epoch in 0 to epochs:
+            let total_error be 0
+            
+            for i in 0 to len(inputs):
+                let prediction be self.predict(inputs[i])
+                
+                let error be 0
+                for j in 0 to len(prediction):
+                    set error be error + (prediction[j] - outputs[i][j]) ** 2
+                set total_error be total_error + error
+            
+            if epoch % 100 == 0:
+                let avg_error be total_error / len(inputs)
+                display "Epoch " + str(epoch) + " - Error: " + str(avg_error)
+        
+        display "Training complete!"
+# Export
+let sigmoid be sigmoid
+let relu be relu
+let Dense be Dense
+let NeuralNetwork be NeuralNetwork

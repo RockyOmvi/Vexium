@@ -1,0 +1,61 @@
+# Test multiple inheritance feature
+
+struct Animal:
+  has species
+  has age
+
+  can init(species, age):
+    self.species be species
+    self.age be age
+
+  can speak():
+    give back "Generic animal sound"
+
+  can describe():
+    give back "This is an animal"
+
+struct Flyer:
+  has max_altitude
+
+  can init_flyer(max_altitude):
+    self.max_altitude be max_altitude
+
+  can fly():
+    give back "Flying high"
+
+struct Bird extends Animal, Flyer:
+  has wingspan
+
+  can init(species, age, max_altitude, wingspan):
+    self.species be species
+    self.age be age
+    self.max_altitude be max_altitude
+    self.wingspan be wingspan
+
+  can speak():
+    give back self.species + " chirps!"
+
+  can fly():
+    give back "Bird flies at " + str(self.max_altitude) + " meters"
+
+# Test instantiation
+display "=== Testing Multiple Inheritance ==="
+let bird be Bird("Sparrow", 2, 5000, 20)
+
+display "Bird species: "
+display bird.species
+display "Bird age: "
+display bird.age
+display "Bird max altitude: "
+display bird.max_altitude
+display "Bird wingspan: "
+display bird.wingspan
+
+display ""
+display "Testing inherited methods:"
+display bird.speak()
+display bird.fly()
+
+display ""
+display "Done!"
+

@@ -16,17 +16,17 @@ static void advance_token(Parser* p) {
     }
 }
 
-static bool check(Parser* p, TokenType type) {
+static bool check(Parser* p, VexiumTokenType type) {
     return p->current.type == type;
 }
 
-static bool match_token(Parser* p, TokenType type) {
+static bool match_token(Parser* p, VexiumTokenType type) {
     if (!check(p, type)) return false;
     advance_token(p);
     return true;
 }
 
-static Token consume(Parser* p, TokenType type, const char* message) {
+static Token consume(Parser* p, VexiumTokenType type, const char* message) {
     if (check(p, type)) {
         Token tok = p->current;
         advance_token(p);
@@ -323,6 +323,45 @@ static ASTNode* parse_primary(Parser* p) {
         return node;
     }
 
+    /* Spawn: spawn fn() or spawn task_name: fn() */
+    if (match_token(p, TOKEN_SPAWN)) {
+        Token spawn_tok = p->previous;
+        ASTNode* node = ast_new_node(NODE_SPAWN, spawn_tok.line, spawn_tok.column);
+        nodelist_init(&node->as.spawn.args);
+        
+        /* Optional: task name (task_name: fn()) */
+        node->as.spawn.name = NULL;
+        if (check(p, TOKEN_IDENTIFIER)) {
+            /* Save parser state to backtrack */
+            Parser saved = *p;
+            advance_token(p); /* consume identifier */
+            if (check(p, TOKEN_COLON)) {
+                /* This is a named spawn: spawn task_name: fn() */
+                node->as.spawn.name = token_text(p->previous);
+                advance_token(p); /* consume ':' */
+            } else {
+                /* Not a name, restore parser state */
+                *p = saved;
+            }
+        }
+        
+        /* Parse the function expression to spawn */
+        node->as.spawn.function = parse_expression(p);
+        
+        /* Parse optional arguments: spawn fn(arg1, arg2) */
+        if (check(p, TOKEN_LPAREN)) {
+            advance_token(p); /* consume ( */
+            if (!check(p, TOKEN_RPAREN)) {
+                do {
+                    nodelist_add(&node->as.spawn.args, parse_expression(p));
+                } while (match_token(p, TOKEN_COMMA));
+            }
+            consume(p, TOKEN_RPAREN, "Expected ')' after spawn arguments");
+        }
+        
+        return node;
+    }
+
     /* Unary: not, - */
     if (match_token(p, TOKEN_NOT) || match_token(p, TOKEN_MINUS)) {
         Token op = p->previous;
@@ -381,7 +420,7 @@ static ASTNode* parse_postfix(Parser* p) {
 }
 
 /* ── Get operator precedence ── */
-static int get_precedence(TokenType type) {
+static int get_precedence(VexiumTokenType type) {
     switch (type) {
         case TOKEN_OR:                                      return 1;
         case TOKEN_AND:                                     return 2;
@@ -618,6 +657,7 @@ static ASTNode* parse_fn(Parser* p) {
     node->as.fn_decl.params = params;
     node->as.fn_decl.return_type = return_type;
     node->as.fn_decl.body = body;
+    nodelist_init(&node->as.fn_decl.decorators);
     return node;
 }
 
@@ -630,6 +670,15 @@ static ASTNode* parse_give_back(Parser* p) {
     }
     ASTNode* node = ast_new_node(NODE_GIVE_BACK, kw.line, kw.column);
     node->as.give_back.value = value;
+    return node;
+}
+
+/* ── defer expr ── */
+static ASTNode* parse_defer(Parser* p) {
+    Token kw = p->previous;
+    ASTNode* expr = parse_expression(p);
+    ASTNode* node = ast_new_node(NODE_DEFER, kw.line, kw.column);
+    node->as.defer.expr = expr;
     return node;
 }
 
@@ -649,7 +698,8 @@ static ASTNode* parse_struct(Parser* p) {
 
     ASTNode* node = ast_new_node(NODE_STRUCT_DECL, kw.line, kw.column);
     node->as.struct_decl.name = token_text(name);
-    node->as.struct_decl.parent_name = parent_name;
+    node->as.struct_decl.parent_names = NULL;
+    node->as.struct_decl.parent_count = 0;
     node->as.struct_decl.fields = NULL;
     node->as.struct_decl.field_count = 0;
     node->as.struct_decl.field_capacity = 0;
@@ -903,11 +953,63 @@ static ASTNode* parse_statement(Parser* p) {
     /* repeat */
     if (match_token(p, TOKEN_REPEAT))  return parse_repeat(p);
 
+    /* Decorator (@) - for functions */
+    if (match_token(p, TOKEN_AT)) {
+        /* Parse decorator: @name or @name(args) */
+        ASTNode* decorator = NULL;
+        if (match_token(p, TOKEN_IDENTIFIER)) {
+            Token dec_name = p->previous;
+            
+            /* Check for decorator call with arguments */
+            if (match_token(p, TOKEN_LPAREN)) {
+                NodeList args;
+                nodelist_init(&args);
+                
+                if (!check(p, TOKEN_RPAREN)) {
+                    do {
+                        nodelist_add(&args, parse_expression(p));
+                    } while (match_token(p, TOKEN_COMMA));
+                }
+                consume(p, TOKEN_RPAREN, "Expected ')' after decorator arguments");
+                
+                /* Create call: decorator(args) */
+                decorator = ast_new_node(NODE_CALL, dec_name.line, dec_name.column);
+                decorator->as.call.callee = ast_new_node(NODE_IDENTIFIER, dec_name.line, dec_name.column);
+                decorator->as.call.callee->as.identifier.name = token_text(dec_name);
+                decorator->as.call.args = args;
+            } else {
+                /* Just @name */
+                decorator = ast_new_node(NODE_IDENTIFIER, dec_name.line, dec_name.column);
+                decorator->as.identifier.name = token_text(dec_name);
+            }
+        }
+        
+        /* Skip newlines before fn */
+        skip_newlines(p);
+        
+        /* Now expect fn */
+        if (match_token(p, TOKEN_FN)) {
+            ASTNode* fn_node = parse_fn(p);
+            if (decorator && fn_node) {
+                nodelist_add(&fn_node->as.fn_decl.decorators, decorator);
+            }
+            return fn_node;
+        }
+        
+        /* No fn after decorator - error */
+        fprintf(stderr, "Error [line %d]: Expected 'fn' after decorator\n", p->current.line);
+        p->had_error = true;
+        return NULL;
+    }
+
     /* fn */
     if (match_token(p, TOKEN_FN))      return parse_fn(p);
 
     /* give back */
     if (match_token(p, TOKEN_GIVE_BACK)) return parse_give_back(p);
+    
+    /* defer */
+    if (match_token(p, TOKEN_DEFER)) return parse_defer(p);
 
     /* break */
     if (match_token(p, TOKEN_BREAK)) {

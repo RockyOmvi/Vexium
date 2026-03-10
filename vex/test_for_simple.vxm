@@ -1,0 +1,5 @@
+let sum be 0
+for i in 0 to 3:
+    sum be sum + i
+
+display sum

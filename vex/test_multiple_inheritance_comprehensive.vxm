@@ -1,0 +1,128 @@
+# Comprehensive Multiple Inheritance Test Suite
+
+display "=== Multiple Inheritance Tests ==="
+
+# Test 1: Basic Multiple Inheritance
+display ""
+display "Test 1: Basic Multiple Inheritance"
+
+struct Living:
+  has age
+
+  can init_living(age):
+    self.age be age
+
+  can lifecycle():
+    give back "Age: " + str(self.age)
+
+struct Movable:
+  has speed
+
+  can init_movable(speed):
+    self.speed be speed
+
+  can move():
+    give back "Moving at " + str(self.speed) + " m/s"
+
+struct Creature extends Living, Movable:
+  has name
+
+  can init(name, age, speed):
+    self.name be name
+    self.age be age
+    self.speed be speed
+
+let creature be Creature("Runner", 5, 20)
+display creature.lifecycle()
+display creature.move()
+display creature.name
+
+# Test 2: Method Overriding with Multiple Parents
+display ""
+display "Test 2: Method Overriding"
+
+struct Flyer:
+  can fly():
+    give back "Generic flying"
+
+struct Swimmer:
+  can swim():
+    give back "Generic swimming"
+
+struct Duck extends Flyer, Swimmer:
+  can fly():
+    give back "Duck flies gracefully"
+
+  can swim():
+    give back "Duck swims perfectly"
+
+let duck be Duck()
+display duck.fly()
+display duck.swim()
+
+# Test 3: Multiple Levels
+display ""
+display "Test 3: Complex Inheritance Chain"
+
+struct Vehicle:
+  has wheels
+
+  can init_vehicle(wheels):
+    self.wheels be wheels
+
+  can drive():
+    give back str(self.wheels) + " wheels driving"
+
+struct Powered:
+  has fuel
+
+  can init_powered(fuel):
+    self.fuel be fuel
+
+  can refuel():
+    give back "Fuel: " + str(self.fuel) + "%"
+
+struct Car extends Vehicle, Powered:
+  has brand
+
+  can init(brand, wheels, fuel):
+    self.brand be brand
+    self.wheels be wheels
+    self.fuel be fuel
+
+let car be Car("Tesla", 4, 100)
+display car.drive()
+display car.refuel()
+display "Brand: " + car.brand
+
+# Test 4: Field Access from Multiple Parents
+display ""
+display "Test 4: Field Access from Multiple Parents"
+
+struct Biological:
+  has dna
+
+  can init_bio(dna):
+    self.dna be dna
+
+struct Mechanical:
+  has metal_content
+
+  can init_mech(metal_content):
+    self.metal_content be metal_content
+
+struct Robot extends Biological, Mechanical:
+  has ai_level
+
+  can init(dna, metal_content, ai_level):
+    self.dna be dna
+    self.metal_content be metal_content
+    self.ai_level be ai_level
+
+let robot be Robot("ACGT", 85, 9)
+display "Robot DNA: " + robot.dna
+display "Metal: " + str(robot.metal_content) + "%"
+display "AI Level: " + str(robot.ai_level)
+
+display ""
+display "=== All Multiple Inheritance Tests Passed ==="

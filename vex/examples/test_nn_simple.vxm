@@ -1,0 +1,25 @@
+# Simple Neural Network for Vexium
+
+display "Testing Neural Network concepts..."
+
+# Sigmoid activation
+fn sigmoid(x):
+    give back 1 / (1 + math.exp(0 - x))
+
+# ReLU activation  
+fn relu(x):
+    if x > 0:
+        give back x
+    give back 0
+
+# Test
+let s be sigmoid(0)
+display "sigmoid(0) = " + str(s)
+
+let r be relu(-5)
+display "relu(-5) = " + str(r)
+
+let r2 be relu(5)
+display "relu(5) = " + str(r2)
+
+display "Neural Network activation functions working!"

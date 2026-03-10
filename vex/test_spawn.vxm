@@ -1,0 +1,3 @@
+# Test spawn and channel keywords
+spawn test_fn()
+channel ch

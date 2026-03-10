@@ -1,0 +1,95 @@
+# Vexium Collections Module
+# Queue, Stack, Set implementations
+
+# Queue - FIFO data structure
+struct Queue:
+    has items
+    has head
+    
+    can create():
+        self.items be []
+        self.head be 0
+    
+    can enqueue(item):
+        append item to self.items
+    
+    can dequeue():
+        if self.items.length is 0:
+            give back nothing
+        let item be self.items[self.head]
+        self.head be self.head + 1
+        give back item
+    
+    can peek():
+        let len be self.items.length
+        if len is 0:
+            give back nothing
+        give back self.items[self.head]
+    
+    can is_empty():
+        give back self.items.length is 0
+    
+    can size():
+        give back self.items.length
+
+# Stack - LIFO data structure
+struct Stack:
+    has items
+    
+    can create():
+        self.items be []
+    
+    can push(item):
+        append item to self.items
+    
+    can pop():
+        let len be self.items.length
+        if len is 0:
+            give back nothing
+        let idx be len - 1
+        let item be self.items[idx]
+        give back item
+    
+    can peek():
+        let len be self.items.length
+        if len is 0:
+            give back nothing
+        let idx be len - 1
+        give back self.items[idx]
+    
+    can is_empty():
+        let len be self.items.length
+        give back len is 0
+    
+    can size():
+        give back self.items.length
+    
+    can clear():
+        self.items be []
+
+# Set - Collection of unique elements
+struct Set:
+    has items
+    
+    can create():
+        self.items be []
+    
+    can add(item):
+        if not self.contains(item):
+            append item to self.items
+    
+    can contains(item):
+        for each x in self.items:
+            if x is item:
+                give back true
+        give back false
+    
+    can is_empty():
+        let len be self.items.length
+        give back len is 0
+    
+    can size():
+        give back self.items.length
+    
+    can clear():
+        self.items be []

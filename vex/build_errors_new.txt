@@ -1,0 +1,421 @@
+In file included from src/module_loader.c:3:0:
+src/module_loader.h:12:1: error: unknown type name 'ModuleCache'
+ ModuleCache* module_cache_create(void);
+ ^~~~~~~~~~~
+src/module_loader.h:15:24: error: unknown type name 'ModuleCache'
+ void module_cache_free(ModuleCache* cache);
+                        ^~~~~~~~~~~
+src/module_loader.h:18:1: error: unknown type name 'Module'
+ Module* module_load(ModuleCache* cache, const char* module_name, Interpreter* interp);
+ ^~~~~~
+src/module_loader.h:18:21: error: unknown type name 'ModuleCache'
+ Module* module_load(ModuleCache* cache, const char* module_name, Interpreter* interp);
+                     ^~~~~~~~~~~
+src/module_loader.h:21:28: error: unknown type name 'Module'
+ VexValue module_get_symbol(Module* module, const char* symbol_name);
+                            ^~~~~~
+src/module_loader.h:24:23: error: unknown type name 'ModuleCache'
+ bool module_is_loaded(ModuleCache* cache, const char* module_name);
+                       ^~~~~~~~~~~
+src/module_loader.c:140:1: error: unknown type name 'ModuleCache'
+ ModuleCache* module_cache_create(void) {
+ ^~~~~~~~~~~
+src/module_loader.c: In function 'module_cache_create':
+src/module_loader.c:141:5: error: unknown type name 'ModuleCache'
+     ModuleCache* cache = malloc(sizeof(ModuleCache));
+     ^~~~~~~~~~~
+src/module_loader.c:141:40: error: 'ModuleCache' undeclared (first use in this function)
+     ModuleCache* cache = malloc(sizeof(ModuleCache));
+                                        ^~~~~~~~~~~
+src/module_loader.c:141:40: note: each undeclared identifier is reported only once for each function it appears in
+src/module_loader.c:142:10: error: request for member 'root' in something not a structure or union
+     cache->root = NULL;
+          ^~
+src/module_loader.c:143:10: error: request for member 'count' in something not a structure or union
+     cache->count = 0;
+          ^~
+src/module_loader.c: At top level:
+src/module_loader.c:147:24: error: unknown type name 'ModuleCache'
+ void module_cache_free(ModuleCache* cache) {
+                        ^~~~~~~~~~~
+src/module_loader.c:171:8: error: unknown type name 'Module'
+ static Module* module_cache_get(ModuleCache* cache, const char* name) {
+        ^~~~~~
+src/module_loader.c:171:33: error: unknown type name 'ModuleCache'
+ static Module* module_cache_get(ModuleCache* cache, const char* name) {
+                                 ^~~~~~~~~~~
+src/module_loader.c:183:30: error: unknown type name 'ModuleCache'
+ static void module_cache_add(ModuleCache* cache, Module* module) {
+                              ^~~~~~~~~~~
+src/module_loader.c:183:50: error: unknown type name 'Module'
+ static void module_cache_add(ModuleCache* cache, Module* module) {
+                                                  ^~~~~~
+src/module_loader.c:194:8: error: unknown type name 'Module'
+ static Module* module_load_impl(ModuleCache* cache, const char* module_name,
+        ^~~~~~
+src/module_loader.c:194:33: error: unknown type name 'ModuleCache'
+ static Module* module_load_impl(ModuleCache* cache, const char* module_name,
+                                 ^~~~~~~~~~~
+src/module_loader.c:198:1: error: unknown type name 'Module'
+ Module* module_load(ModuleCache* cache, const char* module_name, Interpreter* interp) {
+ ^~~~~~
+src/module_loader.c:198:21: error: unknown type name 'ModuleCache'
+ Module* module_load(ModuleCache* cache, const char* module_name, Interpreter* interp) {
+                     ^~~~~~~~~~~
+src/module_loader.c:223:8: error: unknown type name 'Module'
+ static Module* module_load_impl(ModuleCache* cache, const char* module_name,
+        ^~~~~~
+src/module_loader.c:223:33: error: unknown type name 'ModuleCache'
+ static Module* module_load_impl(ModuleCache* cache, const char* module_name,
+                                 ^~~~~~~~~~~
+src/module_loader.c:316:28: error: unknown type name 'Module'
+ VexValue module_get_symbol(Module* module, const char* symbol_name) {
+                            ^~~~~~
+src/module_loader.c:333:23: error: unknown type name 'ModuleCache'
+ bool module_is_loaded(ModuleCache* cache, const char* module_name) {
+                       ^~~~~~~~~~~
+src/json.c: In function 'json_parse_object':
+src/json.c:239:13: warning: implicit declaration of function 'obj_map_set' [-Wimplicit-function-declaration]
+             obj_map_set(map, (ObjString*)as_obj(key), value);
+             ^~~~~~~~~~~
+src/gc.c: In function 'gc_mark_object':
+src/gc.c:15:12: error: 'Obj {aka struct Obj}' has no member named 'is_marked'
+     if (obj->is_marked) return;  /* Already marked */
+            ^~
+src/gc.c:18:8: error: 'Obj {aka struct Obj}' has no member named 'is_marked'
+     obj->is_marked = true;
+        ^~
+src/gc.c:37:14: error: 'OBJ_CLOSURE' undeclared (first use in this function)
+         case OBJ_CLOSURE: {
+              ^~~~~~~~~~~
+src/gc.c:37:14: note: each undeclared identifier is reported only once for each function it appears in
+src/gc.c:38:13: error: unknown type name 'ObjClosure'
+             ObjClosure* closure = (ObjClosure*)obj;
+             ^~~~~~~~~~
+src/gc.c:38:36: error: 'ObjClosure' undeclared (first use in this function)
+             ObjClosure* closure = (ObjClosure*)obj;
+                                    ^~~~~~~~~~
+src/gc.c:38:47: error: expected expression before ')' token
+             ObjClosure* closure = (ObjClosure*)obj;
+                                               ^
+src/gc.c:40:41: error: request for member 'function' in something not a structure or union
+             gc_mark_object((Obj*)closure->function);
+                                         ^~
+src/gc.c:42:40: error: request for member 'upvalue_count' in something not a structure or union
+             for (int i = 0; i < closure->upvalue_count; i++) {
+                                        ^~
+src/gc.c:43:45: error: request for member 'upvalues' in something not a structure or union
+                 gc_mark_object((Obj*)closure->upvalues[i]);
+                                             ^~
+src/gc.c:48:14: error: 'OBJ_UPVALUE' undeclared (first use in this function)
+         case OBJ_UPVALUE: {
+              ^~~~~~~~~~~
+src/gc.c:49:13: error: unknown type name 'ObjUpvalue'
+             ObjUpvalue* upvalue = (ObjUpvalue*)obj;
+             ^~~~~~~~~~
+src/gc.c:49:36: error: 'ObjUpvalue' undeclared (first use in this function)
+             ObjUpvalue* upvalue = (ObjUpvalue*)obj;
+                                    ^~~~~~~~~~
+src/gc.c:49:47: error: expected expression before ')' token
+             ObjUpvalue* upvalue = (ObjUpvalue*)obj;
+                                               ^
+src/gc.c:51:34: error: request for member 'closed' in something not a structure or union
+             gc_mark_value(upvalue->closed);
+                                  ^~
+src/gc.c:77:14: error: 'OBJ_STRUCT_DEF' undeclared (first use in this function)
+         case OBJ_STRUCT_DEF: {
+              ^~~~~~~~~~~~~~
+src/gc.c:78:13: error: unknown type name 'ObjStructDef'
+             ObjStructDef* def = (ObjStructDef*)obj;
+             ^~~~~~~~~~~~
+src/gc.c:78:34: error: 'ObjStructDef' undeclared (first use in this function)
+             ObjStructDef* def = (ObjStructDef*)obj;
+                                  ^~~~~~~~~~~~
+src/gc.c:78:47: error: expected expression before ')' token
+             ObjStructDef* def = (ObjStructDef*)obj;
+                                               ^
+src/gc.c:80:37: error: request for member 'name' in something not a structure or union
+             gc_mark_object((Obj*)def->name);
+                                     ^~
+src/gc.c:82:36: error: request for member 'field_count' in something not a structure or union
+             for (int i = 0; i < def->field_count; i++) {
+                                    ^~
+src/gc.c:83:41: error: request for member 'field_names' in something not a structure or union
+                 gc_mark_object((Obj*)def->field_names[i]);
+                                         ^~
+src/gc.c:86:37: error: request for member 'methods' in something not a structure or union
+             gc_mark_object((Obj*)def->methods);
+                                     ^~
+src/gc.c:90:14: error: 'OBJ_INSTANCE' undeclared (first use in this function)
+         case OBJ_INSTANCE: {
+              ^~~~~~~~~~~~
+src/gc.c:91:13: error: unknown type name 'ObjInstance'
+             ObjInstance* instance = (ObjInstance*)obj;
+             ^~~~~~~~~~~
+src/gc.c:91:38: error: 'ObjInstance' undeclared (first use in this function)
+             ObjInstance* instance = (ObjInstance*)obj;
+                                      ^~~~~~~~~~~
+src/gc.c:91:50: error: expected expression before ')' token
+             ObjInstance* instance = (ObjInstance*)obj;
+                                                  ^
+src/gc.c:93:42: error: request for member 'struct_def' in something not a structure or union
+             gc_mark_object((Obj*)instance->struct_def);
+                                          ^~
+src/gc.c:95:42: error: request for member 'fields' in something not a structure or union
+             gc_mark_object((Obj*)instance->fields);
+                                          ^~
+src/gc.c:99:14: error: 'OBJ_ERROR' undeclared (first use in this function)
+         case OBJ_ERROR: {
+              ^~~~~~~~~
+src/gc.c:100:13: error: unknown type name 'ObjError'
+             ObjError* err = (ObjError*)obj;
+             ^~~~~~~~
+src/gc.c:100:30: error: 'ObjError' undeclared (first use in this function)
+             ObjError* err = (ObjError*)obj;
+                              ^~~~~~~~
+src/gc.c:100:39: error: expected expression before ')' token
+             ObjError* err = (ObjError*)obj;
+                                       ^
+src/gc.c:102:37: error: request for member 'message' in something not a structure or union
+             gc_mark_object((Obj*)err->message);
+                                     ^~
+src/gc.c:103:37: error: request for member 'error_type' in something not a structure or union
+             gc_mark_object((Obj*)err->error_type);
+                                     ^~
+src/gc.c:104:37: error: request for member 'file' in something not a structure or union
+             gc_mark_object((Obj*)err->file);
+                                     ^~
+src/gc.c: In function 'gc_mark_roots':
+src/gc.c:132:43: error: 'CallFrame {aka struct <anonymous>}' has no member named 'closure'
+         gc_mark_object((Obj*)vm->frames[i].closure);
+                                           ^
+src/gc.c:136:10: error: unknown type name 'ObjUpvalue'
+     for (ObjUpvalue* upvalue = vm->open_upvalues;
+          ^~~~~~~~~~
+src/gc.c:136:34: error: 'VM {aka struct <anonymous>}' has no member named 'open_upvalues'
+     for (ObjUpvalue* upvalue = vm->open_upvalues;
+                                  ^~
+src/gc.c:138:27: error: request for member 'next' in something not a structure or union
+          upvalue = upvalue->next) {
+                           ^~
+src/gc.c: In function 'gc_sweep':
+src/gc.c:150:16: error: 'Obj {aka struct Obj}' has no member named 'is_marked'
+         if (obj->is_marked) {
+                ^~
+src/gc.c:152:16: error: 'Obj {aka struct Obj}' has no member named 'is_marked'
+             obj->is_marked = false;
+                ^~
+src/gc.c:172:22: error: 'OBJ_CLOSURE' undeclared (first use in this function)
+                 case OBJ_CLOSURE: {
+                      ^~~~~~~~~~~
+src/gc.c:173:21: error: unknown type name 'ObjClosure'
+                     ObjClosure* c = (ObjClosure*)obj;
+                     ^~~~~~~~~~
+src/gc.c:173:38: error: 'ObjClosure' undeclared (first use in this function)
+                     ObjClosure* c = (ObjClosure*)obj;
+                                      ^~~~~~~~~~
+src/gc.c:173:49: error: expected expression before ')' token
+                     ObjClosure* c = (ObjClosure*)obj;
+                                                 ^
+src/gc.c:174:56: error: 'ObjUpvalue' undeclared (first use in this function)
+                     size = sizeof(ObjClosure) + sizeof(ObjUpvalue*) * c->upvalue_count;
+                                                        ^~~~~~~~~~
+src/gc.c:174:67: error: expected expression before ')' token
+                     size = sizeof(ObjClosure) + sizeof(ObjUpvalue*) * c->upvalue_count;
+                                                                   ^
+src/gc.c:177:22: error: 'OBJ_UPVALUE' undeclared (first use in this function)
+                 case OBJ_UPVALUE:
+                      ^~~~~~~~~~~
+src/gc.c:192:22: error: 'OBJ_STRUCT_DEF' undeclared (first use in this function)
+                 case OBJ_STRUCT_DEF: {
+                      ^~~~~~~~~~~~~~
+src/gc.c:193:21: error: unknown type name 'ObjStructDef'
+                     ObjStructDef* d = (ObjStructDef*)obj;
+                     ^~~~~~~~~~~~
+src/gc.c:193:40: error: 'ObjStructDef' undeclared (first use in this function)
+                     ObjStructDef* d = (ObjStructDef*)obj;
+                                        ^~~~~~~~~~~~
+src/gc.c:193:53: error: expected expression before ')' token
+                     ObjStructDef* d = (ObjStructDef*)obj;
+                                                     ^
+src/gc.c:194:73: error: request for member 'field_count' in something not a structure or union
+                     size = sizeof(ObjStructDef) + sizeof(ObjString*) * d->field_count;
+                                                                         ^~
+src/gc.c:195:27: error: request for member 'field_names' in something not a structure or union
+                     free(d->field_names);
+                           ^~
+src/gc.c:198:22: error: 'OBJ_INSTANCE' undeclared (first use in this function)
+                 case OBJ_INSTANCE:
+                      ^~~~~~~~~~~~
+src/gc.c:199:35: error: 'ObjInstance' undeclared (first use in this function)
+                     size = sizeof(ObjInstance);
+                                   ^~~~~~~~~~~
+src/gc.c:201:22: error: 'OBJ_ERROR' undeclared (first use in this function)
+                 case OBJ_ERROR: {
+                      ^~~~~~~~~
+src/gc.c:202:21: error: unknown type name 'ObjError'
+                     ObjError* e = (ObjError*)obj;
+                     ^~~~~~~~
+src/gc.c:202:36: error: 'ObjError' undeclared (first use in this function)
+                     ObjError* e = (ObjError*)obj;
+                                    ^~~~~~~~
+src/gc.c:202:45: error: expected expression before ')' token
+                     ObjError* e = (ObjError*)obj;
+                                             ^
+src/gc.c:208:19: error: 'VM {aka struct <anonymous>}' has no member named 'bytes_allocated'
+             if (vm->bytes_allocated >= size) {
+                   ^~
+src/gc.c:209:19: error: 'VM {aka struct <anonymous>}' has no member named 'bytes_allocated'
+                 vm->bytes_allocated -= size;
+                   ^~
+src/gc.c:211:19: error: 'VM {aka struct <anonymous>}' has no member named 'bytes_allocated'
+                 vm->bytes_allocated = 0;
+                   ^~
+src/gc.c:225:33: error: 'c' undeclared (first use in this function)
+                     ObjClosure* c = (ObjClosure*)obj;
+                                 ^
+src/gc.c:225:49: error: expected expression before ')' token
+                     ObjClosure* c = (ObjClosure*)obj;
+                                                 ^
+src/gc.c: In function 'gc_init':
+src/gc.c:246:7: error: 'VM {aka struct <anonymous>}' has no member named 'bytes_allocated'
+     vm->bytes_allocated = 0;
+       ^~
+src/gc.c:247:7: error: 'VM {aka struct <anonymous>}' has no member named 'next_gc'
+     vm->next_gc = GC_INITIAL_THRESHOLD;
+       ^~
+src/gc.c: In function 'gc_collect':
+src/gc.c:263:7: error: 'VM {aka struct <anonymous>}' has no member named 'next_gc'
+     vm->next_gc = vm->bytes_allocated * GC_HEAP_GROW_FACTOR;
+       ^~
+src/gc.c:263:21: error: 'VM {aka struct <anonymous>}' has no member named 'bytes_allocated'
+     vm->next_gc = vm->bytes_allocated * GC_HEAP_GROW_FACTOR;
+                     ^~
+src/gc.c:264:11: error: 'VM {aka struct <anonymous>}' has no member named 'next_gc'
+     if (vm->next_gc < GC_INITIAL_THRESHOLD) {
+           ^~
+src/gc.c:265:11: error: 'VM {aka struct <anonymous>}' has no member named 'next_gc'
+         vm->next_gc = GC_INITIAL_THRESHOLD;
+           ^~
+src/gc.c: In function 'gc_free_all':
+src/gc.c:289:18: error: 'OBJ_CLOSURE' undeclared (first use in this function)
+             case OBJ_CLOSURE: {
+                  ^~~~~~~~~~~
+src/gc.c:290:17: error: unknown type name 'ObjClosure'
+                 ObjClosure* c = (ObjClosure*)obj;
+                 ^~~~~~~~~~
+src/gc.c:290:34: error: 'ObjClosure' undeclared (first use in this function)
+                 ObjClosure* c = (ObjClosure*)obj;
+                                  ^~~~~~~~~~
+src/gc.c:290:45: error: expected expression before ')' token
+                 ObjClosure* c = (ObjClosure*)obj;
+                                             ^
+src/gc.c:291:23: error: request for member 'upvalues' in something not a structure or union
+                 free(c->upvalues);
+                       ^~
+src/gc.c:304:18: error: 'OBJ_STRUCT_DEF' undeclared (first use in this function)
+             case OBJ_STRUCT_DEF: {
+                  ^~~~~~~~~~~~~~
+src/gc.c:305:17: error: unknown type name 'ObjStructDef'
+                 ObjStructDef* d = (ObjStructDef*)obj;
+                 ^~~~~~~~~~~~
+src/gc.c:305:36: error: 'ObjStructDef' undeclared (first use in this function)
+                 ObjStructDef* d = (ObjStructDef*)obj;
+                                    ^~~~~~~~~~~~
+src/gc.c:305:49: error: expected expression before ')' token
+                 ObjStructDef* d = (ObjStructDef*)obj;
+                                                 ^
+src/gc.c:306:23: error: request for member 'field_names' in something not a structure or union
+                 free(d->field_names);
+                       ^~
+src/gc.c:317:7: error: 'VM {aka struct <anonymous>}' has no member named 'bytes_allocated'
+     vm->bytes_allocated = 0;
+       ^~
+src/gc.c: In function 'gc_maybe_collect':
+src/gc.c:321:11: error: 'VM {aka struct <anonymous>}' has no member named 'bytes_allocated'
+     if (vm->bytes_allocated > vm->next_gc) {
+           ^~
+src/gc.c:321:33: error: 'VM {aka struct <anonymous>}' has no member named 'next_gc'
+     if (vm->bytes_allocated > vm->next_gc) {
+                                 ^~
+src/bytecode_cache.c:349:6: error: conflicting types for 'cache_load_chunk'
+ bool cache_load_chunk(const char* cache_path, Chunk* chunk, VM* vm) {
+      ^~~~~~~~~~~~~~~~
+In file included from src/bytecode_cache.c:6:0:
+src/bytecode_cache.h:71:6: note: previous declaration of 'cache_load_chunk' was here
+ bool cache_load_chunk(const char* cache_path, Chunk* chunk, struct VM* vm);
+      ^~~~~~~~~~~~~~~~
+In file included from src/task.c:8:0:
+src/task.h:76:5: error: unknown type name 'ObjClosure'
+     ObjClosure* closure;         /* The function to execute */
+     ^~~~~~~~~~
+src/task.h:156:19: error: unknown type name 'ObjClosure'
+ Task* task_create(ObjClosure* closure, bool blocking);
+                   ^~~~~~~~~~
+src/task.c:78:19: error: unknown type name 'ObjClosure'
+ Task* task_create(ObjClosure* closure, bool blocking) {
+                   ^~~~~~~~~~
+src/task.c: In function 'task_destroy':
+src/task.c:105:9: warning: implicit declaration of function 'vm_delete' [-Wimplicit-function-declaration]
+         vm_delete((VM*)task->vm);
+         ^~~~~~~~~
+src/task.c: In function 'task_worker':
+src/task.c:190:62: error: request for member 'function' in something not a structure or union
+         VMResult result = vm_run((VM*)task->vm, task->closure->function);
+                                                              ^~
+src/task.c: In function 'channel_create':
+src/task.c:272:22: error: 'OBJ_CHANNEL' undeclared (first use in this function)
+     chan->obj.type = OBJ_CHANNEL;
+                      ^~~~~~~~~~~
+src/task.c:272:22: note: each undeclared identifier is reported only once for each function it appears in
+src/type_system.c: In function 'infer_binary':
+src/type_system.c:329:5: error: unknown type name 'VexiumTokenType'
+     VexiumTokenType op = node->as.binary.op;
+     ^~~~~~~~~~~~~~~
+src/type_system.c: In function 'infer_unary':
+src/type_system.c:373:5: error: unknown type name 'VexiumTokenType'
+     VexiumTokenType op = node->as.unary.op;
+     ^~~~~~~~~~~~~~~
+src/package.c: In function 'dependency_list_add':
+src/package.c:27:17: warning: implicit declaration of function 'safe_strdup' [-Wimplicit-function-declaration]
+     dep->name = safe_strdup(name);
+                 ^~~~~~~~~~~
+src/package.c:27:15: warning: assignment makes pointer from integer without a cast [-Wint-conversion]
+     dep->name = safe_strdup(name);
+               ^
+src/package.c:28:18: warning: assignment makes pointer from integer without a cast [-Wint-conversion]
+     dep->version = safe_strdup(version);
+                  ^
+src/package.c: In function 'extract_string_value':
+src/package.c:127:20: warning: initialization makes pointer from integer without a cast [-Wint-conversion]
+     char* result = safe_strdup(start);
+                    ^~~~~~~~~~~
+src/package.c: In function 'parse_dependencies_line':
+src/package.c:141:19: warning: initialization makes pointer from integer without a cast [-Wint-conversion]
+     char* value = safe_strdup(eq + 1);
+                   ^~~~~~~~~~~
+src/package.c: In function 'package_parse_toml':
+src/package.c:190:23: warning: initialization makes pointer from integer without a cast [-Wint-conversion]
+         char* value = safe_strdup(eq + 1);
+                       ^~~~~~~~~~~
+src/package.c:224:51: warning: assignment makes pointer from integer without a cast [-Wint-conversion]
+     if (!config->entry_point) config->entry_point = safe_strdup("src/main.vxm");
+                                                   ^
+src/package.c:225:49: warning: assignment makes pointer from integer without a cast [-Wint-conversion]
+     if (!config->output_dir) config->output_dir = safe_strdup("dist");
+                                                 ^
+src/tensor.c: In function 'tensor_new':
+src/tensor.c:220:19: error: 'OBJ_TENSOR' undeclared (first use in this function)
+     t->obj.type = OBJ_TENSOR;
+                   ^~~~~~~~~~
+src/tensor.c:220:19: note: each undeclared identifier is reported only once for each function it appears in
+src/tensor.c:222:11: error: 'Obj {aka struct Obj}' has no member named 'is_marked'
+     t->obj.is_marked = false;
+           ^
+src/tensor.c: In function 'nn_model_new':
+src/tensor.c:1354:19: warning: implicit declaration of function 'safe_strdup' [-Wimplicit-function-declaration]
+     model->name = safe_strdup(name);
+                   ^~~~~~~~~~~
+src/tensor.c:1354:17: warning: assignment makes pointer from integer without a cast [-Wint-conversion]
+     model->name = safe_strdup(name);
+                 ^

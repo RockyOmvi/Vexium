@@ -5,6 +5,7 @@
 #undef TokenType
 #endif
 #include "stdlib.h"
+#include "interpreter.h"
 #include <math.h>
 #include <time.h>
 

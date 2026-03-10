@@ -1,0 +1,12 @@
+# Example math module
+let PI be 3.14159265358979
+let E be 2.71828182845904
+
+fn square(x):
+    give back x * x
+
+fn cube(x):
+    give back x * x * x
+
+fn double_value(x):
+    give back x * 2

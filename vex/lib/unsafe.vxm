@@ -1,0 +1,378 @@
+# ═══════════════════════════════════════════════════════════════════
+# Unsafe/Memory Library for Vexium
+# Memory allocation, pointers, and unsafe operations
+# ═══════════════════════════════════════════════════════════════════
+
+# Memory heap simulation
+struct MemoryHeap:
+    has blocks
+    has next_address
+    has total_allocated
+    has total_freed
+    
+    can create:
+        set self.blocks be {}
+        set self.next_address be 4096  # Start after header
+        set self.total_allocated be 0
+        set self.total_freed be 0
+    
+    can allocate(size):
+        let addr be self.next_address
+        set self.blocks[addr] be {
+            "size": size,
+            "data": [],
+            "in_use": true,
+            "allocation_time": time.time()
+        }
+        
+        set self.next_address be self.next_address + size + 8  # 8 bytes header
+        set self.total_allocated be self.total_allocated + size
+        
+        give back addr
+    
+    can deallocate(addr):
+        if addr in self.blocks:
+            set self.blocks[addr]["in_use"] be false
+            set self.total_freed be self.total_freed + self.blocks[addr]["size"]
+            give back true
+        give back false
+    
+    can read(addr):
+        if addr in self.blocks and self.blocks[addr]["in_use"]:
+            give back self.blocks[addr]["data"]
+        give back nothing
+    
+    can write(addr, data):
+        if addr in self.blocks and self.blocks[addr]["in_use"]:
+            set self.blocks[addr]["data"] be data
+            give back true
+        give back false
+    
+    can get_stats:
+        give back {
+            "total_allocated": self.total_allocated,
+            "total_freed": self.total_freed,
+            "current_used": self.total_allocated - self.total_freed,
+            "num_blocks": len(self.blocks)
+        }
+
+
+# Global heap instance
+let global_heap be MemoryHeap.create()
+
+
+# Memory allocation functions
+can malloc(size):
+    # Allocate memory on heap
+    if size <= 0:
+        give back 0
+    give back global_heap.allocate(size)
+
+can free(addr):
+    # Free allocated memory
+    if addr <= 0:
+        give back false
+    give back global_heap.deallocate(addr)
+
+can calloc(count, size):
+    # Allocate and zero-initialize
+    let total_size be count * size
+    let addr be malloc(total_size)
+    if addr != 0:
+        # Zero initialize (represented as empty array)
+        global_heap.write(addr, [])
+    give back addr
+
+can realloc(addr, new_size):
+    # Reallocate memory
+    if addr == 0:
+        give back malloc(new_size)
+    
+    let old_data be global_heap.read(addr)
+    if old_data == nothing:
+        give back 0
+    
+    let new_addr be malloc(new_size)
+    if new_addr != 0:
+        # Copy old data to new location
+        global_heap.write(new_addr, old_data)
+        free(addr)
+    
+    give back new_addr
+
+can memmove(dest, src, size):
+    # Move memory (safe copy)
+    let data be global_heap.read(src)
+    if data != nothing:
+        global_heap.write(dest, data)
+        give back dest
+    give back 0
+
+can memcpy(dest, src, size):
+    # Copy memory (may overlap)
+    give back memmove(dest, src, size)
+
+can memset(addr, value, size):
+    # Fill memory with value
+    let data be []
+    for i in 0 to size:
+        append value to data
+    global_heap.write(addr, data)
+    give back addr
+
+
+# Pointer type (simulated)
+struct Pointer:
+    has address
+    has type_name
+    has size
+    
+    can create(address, type_name, size):
+        set self.address be address
+        set self.type_name be type_name
+        set self.size be size
+    
+    can read:
+        give back global_heap.read(self.address)
+    
+    can write(data):
+        give back global_heap.write(self.address, data)
+    
+    can offset(offset):
+        let new_addr be self.address + offset
+        give back Pointer.create(new_addr, self.type_name, self.size)
+    
+    can as_int:
+        give back self.address
+    
+    can as_float:
+        give back to_number(self.address)
+
+
+# Pointer arithmetic
+can ptr_add(ptr, offset):
+    give back ptr.offset(offset)
+
+can ptr_sub(ptr1, ptr2):
+    give back ptr1.address - ptr2.address
+
+can ptr_diff(ptr1, ptr2):
+    give back (ptr1.address - ptr2.address) / ptr1.size
+
+
+# Type casts
+can int_to_ptr(value):
+    give back Pointer.create(value, "void", 0)
+
+can ptr_to_int(ptr):
+    give back ptr.address
+
+can float_to_ptr(value):
+    let addr be malloc(8)
+    # Would write float bytes
+    give back Pointer.create(addr, "float", 8)
+
+can ptr_to_float(ptr):
+    give back 0.0  # Would read float bytes
+
+
+# Unsafe block (wrapper for unsafe operations)
+can unsafe(operation):
+    # Execute operation without type checking
+    give back operation()
+
+
+# Memory view (read-only view of memory region)
+struct MemoryView:
+    has address
+    has size
+    has data
+    
+    can create(address, size):
+        set self.address be address
+        set self.size be size
+        set self.data be global_heap.read(address)
+    
+    can get_byte(offset):
+        if offset < len(self.data):
+            give back self.data[offset]
+        give back 0
+    
+    can get_bytes(offset, length):
+        let result be []
+        for i in offset to offset + length:
+            if i < len(self.data):
+                append self.data[i] to result
+        give back result
+    
+    can to_string:
+        let result be ""
+        for each byte in self.data:
+            if byte >= 32 and byte < 127:
+                set result be result + chr(byte)
+            else:
+                set result be result + "."
+        give back result
+
+
+# Memory buffer
+struct Buffer:
+    has data
+    has capacity
+    has position
+    
+    can create(capacity):
+        set self.data be []
+        set self.capacity be capacity
+        set self.position be 0
+        
+        for i in 0 to capacity:
+            append 0 to self.data
+    
+    can write_byte(b):
+        if self.position < self.capacity:
+            set self.data[self.position] be b
+            set self.position be self.position + 1
+            give back true
+        give back false
+    
+    can read_byte:
+        if self.position < self.capacity:
+            let b be self.data[self.position]
+            set self.position be self.position + 1
+            give back b
+        give back 0
+    
+    can write(data):
+        for each b in data:
+            if not self.write_byte(b):
+                give back false
+        give back true
+    
+    can read(length):
+        let result be []
+        for i in 0 to length:
+            append self.read_byte() to result
+        give back result
+    
+    can seek(position):
+        if position >= 0 and position < self.capacity:
+            set self.position be position
+            give back true
+        give back false
+    
+    can tell:
+        give back self.position
+    
+    can reset:
+        set self.position be 0
+    
+    can clear:
+        for i in 0 to self.capacity:
+            set self.data[i] be 0
+        set self.position be 0
+    
+    can to_bytes:
+        give back self.data[0:self.position]
+
+
+# Byte manipulation
+can byte_and(a, b):
+    give back a & b
+
+can byte_or(a, b):
+    give back a | b
+
+can byte_xor(a, b):
+    give back a ^ b
+
+can byte_not(a):
+    give back ~a
+
+can byte_shl(a, n):
+    give back a << n
+
+can byte_shr(a, n):
+    give back a >> n
+
+
+# Bit fields
+can get_bit(value, bit):
+    give back (value >> bit) & 1
+
+can set_bit(value, bit):
+    give back value | (1 << bit)
+
+can clear_bit(value, bit):
+    give back value & ~(1 << bit)
+
+can toggle_bit(value, bit):
+    give back value ^ (1 << bit)
+
+
+# Memory info
+can get_memory_stats:
+    give back global_heap.get_stats()
+
+can get_pointer_address(ptr):
+    give back ptr.address
+
+can is_valid_pointer(ptr):
+    if ptr.address <= 0:
+        give back false
+    if ptr.address < 4096:
+        give back false  # Reserved addresses
+    give back global_heap.blocks[ptr.address]["in_use"] if ptr.address in global_heap.blocks else false
+
+
+# Unsafe array operations
+can unsafe_array_get(arr, index):
+    if index >= 0 and index < len(arr):
+        give back arr[index]
+    throw "Index out of bounds"
+
+can unsafe_array_set(arr, index, value):
+    if index >= 0 and index < len(arr):
+        set arr[index] be value
+        give back true
+    give back false
+
+can unsafe_string_char_at(s, index):
+    if index >= 0 and index < len(s):
+        give back s[index]
+    throw "Index out of bounds"
+
+
+# Size of types
+const SIZE_OF_INT be 4
+const SIZE_OF_FLOAT be 4
+const SIZE_OF_DOUBLE be 8
+const SIZE_OF_POINTER be 8
+const SIZE_OF_CHAR be 1
+
+
+# Alignment helpers
+can align_to(value, alignment):
+    let remainder be value % alignment
+    if remainder == 0:
+        give back value
+    give back value + (alignment - remainder)
+
+can is_aligned(value, alignment):
+    give back value % alignment == 0
+
+
+# Export
+export {
+    MemoryHeap, global_heap,
+    malloc, free, calloc, realloc, memmove, memcpy, memset,
+    Pointer, ptr_add, ptr_sub, ptr_diff,
+    int_to_ptr, ptr_to_int, float_to_ptr, ptr_to_float,
+    unsafe, MemoryView, Buffer,
+    byte_and, byte_or, byte_xor, byte_not, byte_shl, byte_shr,
+    get_bit, set_bit, clear_bit, toggle_bit,
+    get_memory_stats, get_pointer_address, is_valid_pointer,
+    unsafe_array_get, unsafe_array_set, unsafe_string_char_at,
+    SIZE_OF_INT, SIZE_OF_FLOAT, SIZE_OF_DOUBLE, SIZE_OF_POINTER, SIZE_OF_CHAR,
+    align_to, is_aligned
+}

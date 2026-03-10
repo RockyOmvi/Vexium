@@ -1,0 +1,9 @@
+# Test str() function
+let x be 42
+display "x = " + str(x)
+
+let y be 0
+display "y = " + str(y)
+
+display str(123)
+display str(0)

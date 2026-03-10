@@ -14,7 +14,7 @@
 
 /* Call frame (one per active function) */
 typedef struct {
-    ObjFunction* function;
+    struct ObjClosure* closure;
     uint8_t* ip;           /* instruction pointer within function's code */
     Value* slots;          /* pointer into VM stack (base of this frame) */
 } CallFrame;
@@ -36,6 +36,10 @@ typedef struct {
 
     GlobalEntry globals[GLOBALS_MAX];
 
+    struct ObjUpvalue* open_upvalues;
+    size_t bytes_allocated;
+    size_t next_gc;
+
     Obj* objects;          /* head of all allocated objects (for GC) */
 } VM;
 
@@ -48,11 +52,14 @@ typedef enum {
 
 /* ── Public API ── */
 void vm_init(VM* vm);
+VM* vm_new(void);
 void vm_free(VM* vm);
 VMResult vm_run(VM* vm, ObjFunction* fn);
 
 /* Register a native/built-in function */
 typedef Value (*NativeFn)(int argCount, Value* args);
 void vm_define_native(VM* vm, const char* name, NativeFn fn, int arity);
+
+ObjClosure* obj_closure_new(ObjFunction* function);
 
 #endif /* VEXIUM_VM_H */

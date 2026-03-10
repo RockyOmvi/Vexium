@@ -1,0 +1,8 @@
+# Test defer statement
+fn test_defer():
+    defer 1 + 1
+    give back 42
+
+let result be test_defer()
+display "Result:"
+display result

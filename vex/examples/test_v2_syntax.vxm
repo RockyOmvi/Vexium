@@ -1,0 +1,26 @@
+# Test v2 syntax features
+
+display "Testing v2 syntax..."
+
+# Test elif
+let x be 5
+if x > 10:
+    display "x > 10"
+elif x > 5:
+    display "x > 5"
+else:
+    display "x <= 5"
+
+# Test for each
+let arr be [1, 2, 3]
+for each item in arr:
+    display "Item: " + str(item)
+
+# Test can keyword
+can my_function(x):
+    give back x * 2
+
+let result be my_function(5)
+display "result = " + str(result)
+
+display "v2 syntax test complete!"

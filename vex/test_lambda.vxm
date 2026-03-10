@@ -1,0 +1,2 @@
+let add be fn(a, b): a + b
+display add(5, 7)

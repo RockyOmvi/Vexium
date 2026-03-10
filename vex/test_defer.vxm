@@ -1,0 +1,12 @@
+# Test defer statement
+fn cleanup():
+    display "Cleanup called!"
+
+fn test_defer():
+    display "Before defer..."
+    defer cleanup()
+    display "After defer..."
+
+fn main():
+    test_defer()
+    display "After function call"

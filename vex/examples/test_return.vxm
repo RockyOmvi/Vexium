@@ -1,0 +1,8 @@
+# Test give_back in function (Vexium syntax)
+
+fn test():
+    give back 42
+
+x be test()
+display x
+display "Done!"

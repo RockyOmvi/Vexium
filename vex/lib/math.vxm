@@ -1,0 +1,153 @@
+# Vexium Math Module
+# Mathematical functions and constants
+
+# Constants
+let PI be 3.14159265358979323846
+let E be 2.71828182845904523536
+
+# Basic functions
+fn abs(x):
+    if x is less than 0:
+        give back 0 - x
+    give back x
+
+fn floor(x):
+    let int_part be x as int
+    if int_part is greater than x:
+        give back int_part - 1
+    give back int_part
+
+fn ceil(x):
+    let int_part be x as int
+    if int_part is less than x:
+        give back int_part + 1
+    give back int_part
+
+fn round(x):
+    let int_part be x as int
+    let frac be x - int_part
+    if frac is greater than 0.5:
+        give back int_part + 1
+    if frac is less than 0.5:
+        give back int_part
+    give back int_part
+
+fn max(a, b):
+    if a is greater than b:
+        give back a
+    give back b
+
+fn min(a, b):
+    if a is less than b:
+        give back a
+    give back b
+
+fn clamp(x, lo, hi):
+    if x is less than lo:
+        give back lo
+    if x is greater than hi:
+        give back hi
+    give back x
+
+fn pow(base, exp):
+    give back base ** exp
+
+fn sqrt(x):
+    give back x ** 0.5
+
+fn cbrt(x):
+    give back x ** (1.0 / 3.0)
+
+# Trigonometry (Taylor series)
+fn sin(x):
+    let two_pi be 2 * PI
+    while x is greater than two_pi:
+        let x be x - two_pi
+    while x is less than (0 - two_pi):
+        let x be x + two_pi
+    
+    let result be x
+    let term be x
+    let n be 1
+    let sign be -1
+    
+    repeat 10 times:
+        let n be n + 2
+        let term be term * x * x / ((n - 1) * n)
+        let result be result + sign * term
+        let sign be 0 - sign
+    
+    give back result
+
+fn cos(x):
+    give back sin(x + PI / 2)
+
+fn tan(x):
+    let c be cos(x)
+    if c is 0:
+        throw "Math error: tan undefined"
+    give back sin(x) / c
+
+# Logarithms
+fn log(x):
+    if x is less than 0:
+        throw "Math error: log of non-positive"
+    if x is 0:
+        throw "Math error: log of zero"
+    if x is 1:
+        give back 0
+    let y be x - 1
+    if x is greater than 2:
+        let y be y / 2
+    repeat 20 times:
+        let exp_y be E ** y
+        let y be y - (exp_y - x) / exp_y
+    give back y
+
+fn log10(x):
+    give back log(x) / log(10)
+
+fn log2(x):
+    give back log(x) / log(2)
+
+# Combinatorics
+fn factorial(n):
+    if n is less than 0:
+        throw "Math error: factorial of negative"
+    if n is 0:
+        give back 1
+    if n is 1:
+        give back 1
+    let result be 1
+    for i in 2 to n:
+        let result be result * i
+    give back result
+
+fn gcd(a, b):
+    let a be abs(a)
+    let b be abs(b)
+    while b is not 0:
+        let temp be b
+        let b be a % b
+        let a be temp
+    give back a
+
+fn lcm(a, b):
+    if a is 0:
+        give back 0
+    if b is 0:
+        give back 0
+    give back abs(a * b) / gcd(a, b)
+
+fn is_prime(n):
+    if n is less than 2:
+        give back false
+    if n is 2:
+        give back true
+    if n % 2 is 0:
+        give back false
+    let sqrt_n be sqrt(n) as int
+    for i in 3 to sqrt_n by 2:
+        if n % i is 0:
+            give back false
+    give back true

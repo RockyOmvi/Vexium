@@ -1,0 +1,3 @@
+# Test neural network
+let model be neural network:
+    layer dense with 10 inputs, 10 outputs

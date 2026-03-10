@@ -1,0 +1,119 @@
+# Simple Neural Network Library for Vexium
+
+# Activation functions
+fn sigmoid(x):
+    give back 1 / (1 + 2.71828 ** (0 - x))
+
+fn relu(x):
+    if x > 0:
+        give back x
+    give back 0
+
+fn tanh_activation(x):
+    give back (2.71828 ** x - 2.71828 ** (0 - x)) / (2.71828 ** x + 2.71828 ** (0 - x))
+
+# Matrix operations
+fn matrix_create(rows, cols, value):
+    let matrix be []
+    for i in 0 to rows:
+        let row be []
+        for j in 0 to cols:
+            append value to row
+        append row to matrix
+    give back matrix
+
+fn matrix_random(rows, cols):
+    let matrix be []
+    for i in 0 to rows:
+        let row be []
+        for j in 0 to cols:
+            let scale be 1.0 / (rows + cols)
+            append (0.5 - 0.5) * scale to row
+        append row to matrix
+    give back matrix
+
+fn matrix_zeros(rows, cols):
+    give back matrix_create(rows, cols, 0)
+
+# Dense layer
+struct Dense:
+    has input_size
+    has output_size
+    has weights
+    has biases
+    has activation_fn
+
+fn Dense_create(input_sz, output_sz, activation):
+    let layer be {}
+    set layer["input_size"] be input_sz
+    set layer["output_size"] be output_sz
+    set layer["activation_fn"] be activation
+    set layer["weights"] be matrix_random(input_sz, output_sz)
+    set layer["biases"] be matrix_zeros(1, output_sz)
+    give back layer
+
+fn Dense_forward(layer, input):
+    let output be []
+    for i in 0 to layer["output_size"]:
+        let sum be 0
+        for j in 0 to layer["input_size"]:
+            set sum be sum + input[j] * layer["weights"][j][i]
+        set sum be sum + layer["biases"][0][i]
+        
+        if layer["activation_fn"] == "sigmoid":
+            append sigmoid(sum) to output
+        elif layer["activation_fn"] == "relu":
+            append relu(sum) to output
+        elif layer["activation_fn"] == "tanh":
+            append tanh_activation(sum) to output
+        else:
+            append sum to output
+    give back output
+
+# Neural Network
+struct NeuralNetwork:
+    has layers
+    has learning_rate
+
+fn NeuralNetwork_create(lr):
+    let nn be {}
+    set nn["layers"] be []
+    set nn["learning_rate"] be lr
+    give back nn
+
+fn NeuralNetwork_add_layer(nn, layer):
+    append layer to nn["layers"]
+
+fn NeuralNetwork_predict(nn, input):
+    let current be input
+    for each layer in nn["layers"]:
+        set current be Dense_forward(layer, current)
+    give back current
+
+fn NeuralNetwork_train(nn, inputs, outputs, epochs):
+    display "Training neural network for " + str(epochs) + " epochs"
+    for epoch in 0 to epochs:
+        let total_error be 0
+        for i in 0 to len(inputs):
+            let prediction be NeuralNetwork_predict(nn, inputs[i])
+            let error be 0
+            for j in 0 to len(prediction):
+                set error be error + (prediction[j] - outputs[i][j]) ** 2
+            set total_error be total_error + error
+        if epoch % 10 == 0:
+            display "Epoch " + str(epoch) + " - Error: " + str(total_error / len(inputs))
+    display "Training complete!"
+
+# Exports
+let sigmoid be sigmoid
+let relu be relu
+let tanh_activation be tanh_activation
+let matrix_create be matrix_create
+let matrix_random be matrix_random
+let matrix_zeros be matrix_zeros
+let Dense_create be Dense_create
+let Dense_forward be Dense_forward
+let NeuralNetwork_create be NeuralNetwork_create
+let NeuralNetwork_add_layer be NeuralNetwork_add_layer
+let NeuralNetwork_predict be NeuralNetwork_predict
+let NeuralNetwork_train be NeuralNetwork_train

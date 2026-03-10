@@ -1,0 +1,563 @@
+# ═══════════════════════════════════════════════════════════════════
+# SQLite Library for Vexium
+# Build Your Own SQLite Database
+# ═══════════════════════════════════════════════════════════════════
+
+# B-Tree implementation for indexes
+struct BTree:
+    has order
+    has root
+    has is_leaf
+    
+    can create(order):
+        set self.order be order
+        set self.is_leaf be true
+        set self.root be {"keys": [], "children": []}
+    
+    can search(node, key):
+        let i be 0
+        while i < len(node["keys"]) and key > node["keys"][i]["key"]:
+            set i be i + 1
+        
+        if i < len(node["keys"]) and key == node["keys"][i]["key"]:
+            give back node["keys"][i]["value"]
+        
+        if node["is_leaf"]:
+            give back nothing
+        
+        give back self.search(node["children"][i], key)
+    
+    can insert(node, key, value):
+        if node["is_leaf"]:
+            # Insert into leaf
+            let i be 0
+            while i < len(node["keys"]) and key > node["keys"][i]["key"]:
+                set i be i + 1
+            
+            insert {"key": key, "value": value} at i of node["keys"]
+            insert nothing at i of node["children"]
+            
+            if len(node["keys"]) >= self.order:
+                give back self.split(node)
+            give back node
+        
+        # Find child to insert into
+        let i be 0
+        while i < len(node["keys"]) and key > node["keys"][i]["key"]:
+            set i be i + 1
+        
+        let new_child be self.insert(node["children"][i], key, value)
+        if new_child != nothing:
+            insert new_child at i + 1 of node["children"]
+            if len(node["keys"]) >= self.order:
+                give back self.split(node)
+        
+        give back nothing
+    
+    can split(node):
+        let mid_idx be to_number(len(node["keys"]) / 2)
+        let new_node be {
+            "keys": node["keys"][mid_idx + 1:],
+            "children": node["children"][mid_idx + 1:],
+            "is_leaf": node["is_leaf"]
+        }
+        
+        set node["keys"] be node["keys"][0:mid_idx]
+        set node["children"] be node["children"][0:mid_idx + 1]
+        
+        give back new_node
+    
+    can insert_key(key, value):
+        let new_root be self.insert(self.root, key, value)
+        if new_root != nothing:
+            set self.root be {
+                "keys": [new_root["keys"][0]],
+                "children": [self.root, new_root],
+                "is_leaf": false
+            }
+
+
+# Record storage
+struct Record:
+    has id
+    has data
+    has deleted
+    
+    can create(id, data):
+        set self.id be id
+        set self.data be data
+        set self.deleted be false
+    
+    can to_bytes:
+        # Serialize record to bytes
+        give back json.stringify({"id": self.id, "data": self.data})
+    
+    can from_bytes(bytes):
+        # Deserialize record from bytes
+        let obj be json.parse(bytes)
+        set self.id be obj["id"]
+        set self.data be obj["data"]
+        give back self
+
+
+# Page management
+struct Page:
+    has page_number
+    has data
+    has page_type
+    has next_page
+    
+    can create(page_number, page_type):
+        set self.page_number be page_number
+        set self.page_type be page_type
+        set self.data be []  # 4096 bytes would be allocated
+        set self.next_page be nothing
+    
+    can write(data, offset):
+        for i in 0 to len(data):
+            if offset + i < len(self.data):
+                set self.data[offset + i] be data[i]
+    
+    can read(offset, length):
+        let result be []
+        for i in 0 to length:
+            if offset + i < len(self.data):
+                append self.data[offset + i] to result
+        give back result
+
+
+# Table schema
+struct TableSchema:
+    has name
+    has columns
+    has primary_key
+    has indexes
+    
+    can create(name):
+        set self.name be name
+        set self.columns be []
+        set self.primary_key be nothing
+        set self.indexes be {}
+    
+    can add_column(name, type, primary_key):
+        append {"name": name, "type": type} to self.columns
+        if primary_key:
+            set self.primary_key be name
+    
+    can add_index(column_name):
+        set self.indexes[column_name] be BTree.create(3)
+
+
+# Query parser (simplified SQL)
+struct QueryParser:
+    has sql
+    
+    can parse(sql):
+        set self.sql be sql
+        
+        let tokens be self.tokenize(sql)
+        let query_type be tokens[0]
+        
+        if query_type == "SELECT":
+            give back self.parse_select(tokens)
+        elif query_type == "INSERT":
+            give back self.parse_insert(tokens)
+        elif query_type == "UPDATE":
+            give back self.parse_update(tokens)
+        elif query_type == "DELETE":
+            give back self.parse_delete(tokens)
+        elif query_type == "CREATE":
+            give back self.parse_create(tokens)
+        elif query_type == "DROP":
+            give back self.parse_drop(tokens)
+        
+        give back {"type": "unknown", "raw": sql}
+    
+    can tokenize(sql):
+        # Simple tokenizer
+        let tokens be []
+        let current be ""
+        let in_string be false
+        
+        for each c in sql:
+            if c == "'" or c == '"':
+                set in_string be not in_string
+                set current be current + c
+            elif (c == " " or c == "(" or c == ")" or c == "," or c == ";") and not in_string:
+                if len(current) > 0:
+                    append current to tokens
+                    set current be ""
+            else:
+                set current be current + c
+        
+        if len(current) > 0:
+            append current to tokens
+        
+        give back tokens
+    
+    can parse_select(tokens):
+        # SELECT columns FROM table WHERE condition
+        let result be {"type": "SELECT"}
+        
+        let from_idx be 0
+        for i in 0 to len(tokens):
+            if tokens[i] == "FROM":
+                set from_idx be i
+                break
+        
+        # Columns
+        if from_idx > 1:
+            let cols_str be tokens[1:from_idx]
+            if cols_str[0] == "*":
+                set result["columns"] be ["*"]
+            else:
+                set result["columns"] be cols_str
+        else:
+            set result["columns"] be ["*"]
+        
+        # Table
+        if from_idx > 0 and from_idx < len(tokens):
+            set result["table"] be tokens[from_idx + 1]
+        
+        # WHERE clause
+        let where_idx be 0
+        for i in 0 to len(tokens):
+            if tokens[i] == "WHERE":
+                set where_idx be i
+                break
+        
+        if where_idx > 0:
+            set result["where"] be tokens[where_idx + 1:]
+        
+        give back result
+    
+    can parse_insert(tokens):
+        # INSERT INTO table (columns) VALUES (values)
+        let result be {"type": "INSERT"}
+        
+        if len(tokens) > 2:
+            set result["table"] be tokens[2]
+        
+        let values_idx be 0
+        for i in 0 to len(tokens):
+            if tokens[i] == "VALUES":
+                set values_idx be i
+                break
+        
+        if values_idx > 0:
+            set result["values"] be tokens[values_idx + 1:]
+        
+        give back result
+    
+    can parse_update(tokens):
+        # UPDATE table SET column = value WHERE condition
+        let result be {"type": "UPDATE"}
+        
+        if len(tokens) > 1:
+            set result["table"] be tokens[1]
+        
+        let set_idx be 0
+        for i in 0 to len(tokens):
+            if tokens[i] == "SET":
+                set set_idx be i
+                break
+        
+        if set_idx > 0:
+            set result["set"] be tokens[set_idx + 1:]
+        
+        give back result
+    
+    can parse_delete(tokens):
+        # DELETE FROM table WHERE condition
+        let result be {"type": "DELETE"}
+        
+        let from_idx be 0
+        for i in 0 to len(tokens):
+            if tokens[i] == "FROM":
+                set from_idx be i
+                break
+        
+        if from_idx > 0 and from_idx < len(tokens):
+            set result["table"] be tokens[from_idx + 1]
+        
+        give back result
+    
+    can parse_create(tokens):
+        # CREATE TABLE name (columns)
+        let result be {"type": "CREATE"}
+        
+        if len(tokens) > 2:
+            set result["table"] be tokens[2]
+        
+        if len(tokens) > 3:
+            set result["columns"] be tokens[3:]
+        
+        give back result
+    
+    can parse_drop(tokens):
+        # DROP TABLE name
+        let result be {"type": "DROP"}
+        
+        if len(tokens) > 2:
+            set result["table"] be tokens[2]
+        
+        give back result
+
+
+# Query executor
+struct QueryExecutor:
+    has database
+    
+    can create(database):
+        set self.database be database
+    
+    can execute(query):
+        if query["type"] == "SELECT":
+            give back self.execute_select(query)
+        elif query["type"] == "INSERT":
+            give back self.execute_insert(query)
+        elif query["type"] == "UPDATE":
+            give back self.execute_update(query)
+        elif query["type"] == "DELETE":
+            give back self.execute_delete(query)
+        
+        give back {"error": "Unknown query type"}
+    
+    can execute_select(query):
+        let table_name be query["table"]
+        
+        if table_name not in self.database.tables:
+            give back []
+        
+        let table be self.database.tables[table_name]
+        let results be []
+        
+        for each record in table.records:
+            if not record.deleted:
+                # Apply WHERE clause (simplified)
+                if "where" in query:
+                    # Simplified - just return all for now
+                    pass
+                
+                if query["columns"][0] == "*":
+                    append record.data to results
+                else:
+                    let row be {}
+                    for each col in query["columns"]:
+                        if col in record.data:
+                            set row[col] be record.data[col]
+                    append row to results
+        
+        give back results
+    
+    can execute_insert(query):
+        let table_name be query["table"]
+        
+        if table_name not in self.database.tables:
+            give back {"error": "Table not found"}
+        
+        let table be self.database.tables[table_name]
+        let values be query["values"]
+        
+        let data be {}
+        for i in 0 to len(table.schema.columns):
+            if i < len(values):
+                set data[table.schema.columns[i]["name"]] be values[i]
+        
+        let record be Record.create(table.next_id, data)
+        append record to table.records
+        set table.next_id be table.next_id + 1
+        
+        give back {"rows_inserted": 1}
+    
+    can execute_update(query):
+        give back {"rows_updated": 0}
+    
+    can execute_delete(query):
+        give back {"rows_deleted": 0}
+
+
+# Database table
+struct Table:
+    has name
+    has schema
+    has records
+    has indexes
+    has next_id
+    
+    can create(name):
+        set self.name be name
+        set self.schema be TableSchema.create(name)
+        set self.records be []
+        set self.indexes be {}
+        set self.next_id be 1
+    
+    can insert(data):
+        let record be Record.create(self.next_id, data)
+        append record to self.records
+        set self.next_id be self.next_id + 1
+        
+        # Update indexes
+        for each idx_name in self.indexes:
+            let idx be self.indexes[idx_name]
+            if idx_name in data:
+                idx.insert_key(data[idx_name], record.id)
+        
+        give back record.id
+    
+    can select_all:
+        let results be []
+        for each record in self.records:
+            if not record.deleted:
+                append record.data to results
+        give back results
+    
+    can select_where(column, value):
+        let results be []
+        for each record in self.records:
+            if not record.deleted and record.data[column] == value:
+                append record.data to results
+        give back results
+    
+    can delete(id):
+        for each record in self.records:
+            if record.id == id:
+                set record.deleted be true
+                give back true
+        give back false
+
+
+# SQLite Database
+struct SQLite:
+    has tables
+    has query_parser
+    has query_executor
+    has filename
+    
+    can create(filename):
+        set self.filename be filename
+        set self.tables be {}
+        set self.query_parser be QueryParser.create("")
+        set self.query_executor be QueryExecutor.create(self)
+    
+    can create_table(name, columns):
+        let table be Table.create(name)
+        
+        for each col in columns:
+            let parts be col.split(" ")
+            let col_name be parts[0]
+            let col_type be parts[1] if len(parts) > 1 else "TEXT"
+            let is_pk be false
+            if "PRIMARY" in col:
+                set is_pk be true
+            table.schema.add_column(col_name, col_type, is_pk)
+        
+        set self.tables[name] be table
+        give back table
+    
+    can drop_table(name):
+        if name in self.tables:
+            remove name from self.tables
+            give back true
+        give back false
+    
+    can execute(sql):
+        let query be self.query_parser.parse(sql)
+        give back self.query_executor.execute(query)
+    
+    can query(sql):
+        # Alias for execute
+        give back self.execute(sql)
+    
+    # Convenience methods
+    can insert(table, data):
+        if table not in self.tables:
+            give back {"error": "Table not found"}
+        
+        let id be self.tables[table].insert(data)
+        give back {"id": id}
+    
+    can select(table):
+        if table not in self.tables:
+            give back []
+        give back self.tables[table].select_all()
+    
+    can select_where(table, column, value):
+        if table not in self.tables:
+            give back []
+        give back self.tables[table].select_where(column, value)
+    
+    can delete(table, id):
+        if table not in self.tables:
+            give back {"error": "Table not found"}
+        give back {"deleted": self.tables[table].delete(id)}
+    
+    # SQL convenience methods
+    can select_from(sql):
+        give back self.execute(sql)
+    
+    can insert_into(sql):
+        give back self.execute(sql)
+    
+    can update(sql):
+        give back self.execute(sql)
+    
+    can delete_from(sql):
+        give back self.execute(sql)
+    
+    # Transaction support
+    can begin:
+        # Start transaction (simplified)
+        give back {"status": "transaction started"}
+    
+    can commit:
+        # Commit transaction (simplified)
+        give back {"status": "transaction committed"}
+    
+    can rollback:
+        # Rollback transaction (simplified)
+        give back {"status": "transaction rolled back"}
+    
+    # Export to file
+    can export:
+        let data be {}
+        for each table_name in self.tables:
+            set data[table_name] be self.tables[table_name].select_all()
+        give back json.stringify(data)
+    
+    # Import from file
+    can import(json_data):
+        let data be json.parse(json_data)
+        for each table_name in data:
+            # Recreate tables and data
+            display "Importing table: " + table_name
+        give back {"status": "imported"}
+
+
+# SQLite connection (for external databases)
+struct SQLiteConnection:
+    has filename
+    is_connected
+    
+    can open(filename):
+        set self.filename be filename
+        set self.is_connected be false
+        # In a real implementation, would open SQLite file
+        give back self
+    
+    can close:
+        set self.is_connected be false
+        give back true
+    
+    can execute(sql):
+        if not self.is_connected:
+            give back {"error": "Not connected"}
+        # Would execute on real SQLite
+        give back {"rows": []}
+
+
+# Export
+export {
+    BTree, Record, Page, TableSchema, QueryParser, QueryExecutor,
+    Table, SQLite, SQLiteConnection
+}

@@ -26,6 +26,11 @@ typedef enum {
     NODE_ASSIGN,            /* x be 5, x = 5 */
     NODE_LAMBDA,            /* (a, b) => a + b */
     NODE_LIST_COMP,         /* [x * 2 for each x in arr if x > 3] */
+    NODE_AWAIT,             /* await expr */
+    NODE_SPAWN,             /* spawn expr (create concurrent task) */
+    NODE_CHANNEL_CREATE,    /* channel() - create a channel */
+    NODE_DECORATOR,         /* @decorator applied to fn/struct */
+    NODE_YIELD,             /* yield expr (generator) */
 
     /* ── Statements ── */
     NODE_LET_DECL,          /* let x be 5 */
@@ -39,14 +44,19 @@ typedef enum {
     NODE_REPEAT,            /* repeat N times */
     NODE_FN_DECL,           /* fn name(params): body */
     NODE_GIVE_BACK,         /* give back value */
+    NODE_DEFER,             /* defer statement */
     NODE_BREAK,             /* break */
     NODE_SKIP,              /* skip (continue) */
     NODE_STRUCT_DECL,       /* struct Name: has/can */
+    NODE_TRAIT,             /* trait Name: methods */
+    NODE_IMPL,              /* impl Trait for Struct: methods */
+    NODE_OPERATOR_OVERLOAD, /* operator + on struct */
     NODE_MATCH,             /* match expr: cases */
     NODE_USE,               /* use module */
     NODE_FROM_USE,          /* from module use name */
     NODE_ATTEMPT,           /* attempt/otherwise */
     NODE_PASS,              /* pass */
+    NODE_UNSAFE,            /* unsafe block */
     NODE_BLOCK,             /* indented block of statements */
     NODE_PROGRAM            /* top-level program */
 } NodeType;
@@ -130,13 +140,13 @@ struct ASTNode {
         struct {
             ASTNode* left;
             ASTNode* right;
-            TokenType op;
+            VexiumTokenType op;
         } binary;
 
         /* Unary op: OP operand */
         struct {
             ASTNode* operand;
-            TokenType op;
+            VexiumTokenType op;
         } unary;
 
         /* Function call: callee(args) */
@@ -157,6 +167,18 @@ struct ASTNode {
             char* field;
         } field_access;
 
+        /* Spawn: spawn expr (create concurrent task) */
+        struct {
+            char* name;          /* Optional task name */
+            ASTNode* function;  /* The function expression */
+            NodeList args;       /* Arguments to pass to the function */
+        } spawn;
+
+        /* Channel create: channel() */
+        struct {
+            int capacity;  /* Buffer size, 0 for unbuffered */
+        } channel_create;
+
         /* Array literal: [items] */
         struct { NodeList elements; } array_literal;
 
@@ -171,7 +193,7 @@ struct ASTNode {
         struct {
             ASTNode* target;
             ASTNode* value;
-            TokenType op;   /* TOKEN_BE or TOKEN_ASSIGN, TOKEN_PLUS_ASSIGN, etc */
+            VexiumTokenType op;   /* TOKEN_BE or TOKEN_ASSIGN, TOKEN_PLUS_ASSIGN, etc */
         } assign;
 
         /* let x be 5 / const x be 5 */
@@ -225,15 +247,23 @@ struct ASTNode {
             ParamList params;
             char* return_type;   /* NULL if no return type */
             ASTNode* body;
+            NodeList decorators; /* @decorator expressions */
         } fn_decl;
 
         /* give back value */
         struct { ASTNode* value; } give_back;
 
+        /* defer expr — deferred execution before function return */
+        struct { ASTNode* expr; } defer;
+
+        /* await expr — wait for async operation */
+        struct { ASTNode* expr; } await;
+
         /* struct Name [extends Parent]: fields + methods */
         struct {
             char* name;
-            char* parent_name;     /* NULL if no inheritance */
+            char** parent_names;    /* Array of parent struct names */
+            int parent_count;       /* Number of parents */
             StructField* fields;
             int field_count;
             int field_capacity;
@@ -241,6 +271,37 @@ struct ASTNode {
             int method_count;
             int method_capacity;
         } struct_decl;
+
+        /* trait Name: method_signatures */
+        struct {
+            char* name;
+            StructMethod* methods;  /* Only signatures, no bodies */
+            int method_count;
+            int method_capacity;
+        } trait_decl;
+
+        /* impl Trait for Struct: implementations */
+        struct {
+            char* trait_name;
+            char* struct_name;
+            StructMethod* methods;
+            int method_count;
+            int method_capacity;
+        } impl_block;
+
+        /* operator + on struct (or other operators: -, *, /, ==, etc) */
+        struct {
+            char* struct_name;
+            VexiumTokenType op;          /* TOKEN_PLUS, TOKEN_STAR, etc */
+            ParamList params;      /* Usually 2 params: self, other */
+            char* return_type;
+            ASTNode* body;
+        } operator_overload;
+
+        /* Unsafe block */
+        struct {
+            ASTNode* body;
+        } unsafe_block;
 
         /* (params) => expr — lambda */
         struct {
@@ -280,6 +341,9 @@ struct ASTNode {
 
         /* Block of statements */
         struct { NodeList statements; } block;
+
+        /* yield expr */
+        struct { ASTNode* expr; } yield;
 
         /* Program (top-level) */
         struct { NodeList statements; } program;

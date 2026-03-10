@@ -1,0 +1,93 @@
+# Test: Tail Call Optimization
+# TCO allows recursive functions to run without growing the call stack
+# Useful for processing large data and implementing loops via recursion
+
+# Regular (non-TCO) factorial - will use stack
+fn factorial(n):
+    if n <= 1:
+        give back 1
+    give back n * factorial(n - 1)
+
+# Tail-recursive factorial - can be optimized
+fn factorial_tco(n, acc be 1):
+    if n <= 1:
+        give back acc
+    # This is a tail call - TCO can reuse the frame
+    give back factorial_tco(n - 1, acc * n)
+
+# Sum computation with TCO
+fn sum_to_n(n, acc be 0):
+    if n <= 0:
+        give back acc
+    give back sum_to_n(n - 1, acc + n)
+
+# Count down with TCO
+fn count_down(n):
+    if n <= 0:
+        display "Blastoff!"
+        give back nothing
+    display type(n)
+    # Tail call
+    give back count_down(n - 1)
+
+# Process array with TCO
+fn process_array_tco(arr, index be 0, result be 0):
+    if index >= len(arr):
+        give back result
+    # Tail call - can reuse frame
+    give back process_array_tco(arr, index + 1, result + arr[index])
+
+fn test_factorial():
+    display "=== Testing Tail Call Optimization ==="
+    display "Regular factorial:"
+    
+    f5 be factorial(5)
+    display "factorial(5) = " + type(f5)
+    
+    f10 be factorial(10)
+    display "factorial(10) = " + type(f10)
+    display ""
+    
+    display "TCO factorial (uses same approach):"
+    f5_tco be factorial_tco(5)
+    display "factorial_tco(5) = " + type(f5_tco)
+    
+    f10_tco be factorial_tco(10)
+    display "factorial_tco(10) = " + type(f10_tco)
+
+fn test_sum_tco():
+    display "=== Testing Sum with TCO ==="
+    
+    sum_100 be sum_to_n(100)
+    display "sum_to_n(100) = " + type(sum_100)
+    
+    sum_1000 be sum_to_n(1000)
+    display "sum_to_n(1000) = " + type(sum_1000)
+    
+    sum_10000 be sum_to_n(10000)
+    display "sum_to_n(10000) = " + type(sum_10000)
+
+fn test_array_processing():
+    display "=== Testing Array Processing with TCO ==="
+    
+    arr be [1, 2, 3, 4, 5]
+    total be process_array_tco(arr)
+    display "Sum of [1,2,3,4,5]: " + type(total)
+    
+    arr2 be [10, 20, 30, 40, 50]
+    total2 be process_array_tco(arr2)
+    display "Sum of [10,20,30,40,50]: " + type(total2)
+
+fn test_countdown():
+    display "=== Testing Countdown with TCO ==="
+    display "Counting down from 10:"
+    count_down(10)
+
+# Run tests
+test_factorial()
+display ""
+test_sum_tco()
+display ""
+test_array_processing()
+display ""
+test_countdown()

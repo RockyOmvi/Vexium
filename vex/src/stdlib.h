@@ -1,9 +1,26 @@
 #ifndef VEXIUM_STDLIB_H
 #define VEXIUM_STDLIB_H
 
-#include "interpreter.h"
+/* Include stdbool first to avoid conflicts with system stdlib.h */
+#ifdef _WIN32
+#ifndef __STDBOOL_H
+#define __STDBOOL_H
+#ifndef bool
+typedef int bool;
+#define true 1
+#define false 0
+#endif
+#endif
+#else
+#include <stdbool.h>
+#endif
 
-/* ══════════════════════════════════════════════════════════════
+#include "common.h"
+
+/* Forward declarations to avoid circular dependency */
+typedef struct Environment Environment;
+
+/* ════════════════════════════════════════════════════════════════
  *  STANDARD LIBRARY MODULE SYSTEM
  *
  *  Modules: math, string, file, sys
@@ -11,7 +28,7 @@
  *  Usage in Vexium:
  *    use math           # loads all math functions
  *    from math use sqrt # loads only sqrt
- * ══════════════════════════════════════════════════════════════ */
+ * ════════════════════════════════════════════════════════════════ */
 
 /* Register a standard library module into the given environment.
  * Returns true if the module was found, false otherwise. */

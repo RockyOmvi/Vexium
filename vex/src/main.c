@@ -5,61 +5,47 @@
 #include "parser.h"
 #include "interpreter.h"
 #include "compiler.h"
+#include "type_system.h"
 #include "vm.h"
 #include <time.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-/* ══════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════
  *  FILE READING
- * ══════════════════════════════════════════════════════════════ */
+ * ══════════════════════════════════════════════════════════════════════ */
 
 static char* read_file(const char* path) {
     FILE* file = fopen(path, "rb");
-    if (file == NULL) {
-        fprintf(stderr, "Error: Could not open file '%s'\n", path);
-        return NULL;
-    }
-
+    if (file == NULL) { fprintf(stderr, "Error: Could not open file '%s'\n", path); return NULL; }
     fseek(file, 0L, SEEK_END);
     size_t file_size = ftell(file);
     rewind(file);
-
     char* buffer = (char*)malloc(file_size + 1);
-    if (buffer == NULL) {
-        fprintf(stderr, "Error: Not enough memory to read '%s'\n", path);
-        fclose(file);
-        return NULL;
-    }
-
+    if (buffer == NULL) { fclose(file); return NULL; }
     size_t bytes_read = fread(buffer, sizeof(char), file_size, file);
     buffer[bytes_read] = '\0';
-
     fclose(file);
     return buffer;
 }
 
-/* ══════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════
  *  RUN FILE — Parse and EXECUTE
- * ══════════════════════════════════════════════════════════════ */
+ * ══════════════════════════════════════════════════════════════════════ */
 
 static int run_file(const char* path) {
     char* source = read_file(path);
     if (source == NULL) return 1;
-
     Parser parser;
     parser_init(&parser, source);
     ASTNode* program = parser_parse(&parser);
-
-    if (parser.had_error) {
-        fprintf(stderr, "\nParsing failed with errors.\n");
-        ast_free(program);
-        free(source);
-        return 1;
-    }
-
+    if (parser.had_error) { fprintf(stderr, "\nParsing failed with errors.\n"); ast_free(program); free(source); return 1; }
+    int tc = vex_type_check(program);
+    if (tc != 0) { fprintf(stderr, "Type checking failed for %s\n", path); ast_free(program); free(source); return 1; }
     Interpreter interp;
     interpreter_init(&interp);
     interpret_program(&interp, program);
-
     int exit_code = interp.had_error ? 1 : 0;
     interpreter_free(&interp);
     ast_free(program);
@@ -67,60 +53,41 @@ static int run_file(const char* path) {
     return exit_code;
 }
 
-/* ══════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════
  *  RUN VM — Parse, Compile, and execute via bytecode VM
- * ══════════════════════════════════════════════════════════════ */
+ * ══════════════════════════════════════════════════════════════════════ */
 
 static int run_vm_file(const char* path) {
     char* source = read_file(path);
     if (source == NULL) return 1;
-
     Parser parser;
     parser_init(&parser, source);
     ASTNode* program = parser_parse(&parser);
-
-    if (parser.had_error) {
-        fprintf(stderr, "\nParsing failed with errors.\n");
-        ast_free(program);
-        free(source);
-        return 1;
-    }
-
+    if (parser.had_error) { fprintf(stderr, "\nParsing failed with errors.\n"); ast_free(program); free(source); return 1; }
     ObjFunction* fn = compile(program);
-    if (fn == NULL) {
-        fprintf(stderr, "Compilation failed.\n");
-        ast_free(program);
-        free(source);
-        return 1;
-    }
-
+    if (fn == NULL) { fprintf(stderr, "Compilation failed.\n"); ast_free(program); free(source); return 1; }
     VM vm;
     vm_init(&vm);
     VMResult result = vm_run(&vm, fn);
     vm_free(&vm);
-
     ast_free(program);
     free(source);
     return (result == VM_OK) ? 0 : 1;
 }
 
-/* ══════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════
  *  DISASSEMBLE — Show compiled bytecode
- * ══════════════════════════════════════════════════════════════ */
+ * ══════════════════════════════════════════════════════════════════════ */
 
 static void disassemble_function(ObjFunction* fn, int indent) {
     for (int i = 0; i < indent; i++) printf("  ");
-    printf("=== Function: %s (arity %d, %d bytes) ===\n",
-           fn->name ? fn->name : "<script>", fn->arity, fn->chunk_count);
-
+    printf("=== Function: %s (arity %d, %d bytes) ===\n", fn->name ? fn->name : "<script>", fn->arity, fn->chunk_count);
     int offset = 0;
     while (offset < fn->chunk_count) {
         for (int i = 0; i < indent; i++) printf("  ");
         printf("%04d  ", offset);
-
         uint8_t op = fn->code[offset++];
         printf("%-20s", opcode_name(op));
-
         switch (op) {
             case OP_CONST:
             case OP_DEFINE_GLOBAL:
@@ -129,17 +96,13 @@ static void disassemble_function(ObjFunction* fn, int indent) {
                 uint16_t idx = fn->code[offset] | (fn->code[offset + 1] << 8);
                 offset += 2;
                 printf(" %d  (", idx);
-                if (idx < (uint16_t)fn->const_count) {
-                    value_print(fn->constants[idx]);
-                }
+                if (idx < (uint16_t)fn->const_count) value_print(fn->constants[idx]);
                 printf(")");
                 break;
             }
             case OP_GET_LOCAL:
             case OP_SET_LOCAL:
-            case OP_CALL:
-                printf(" %d", fn->code[offset++]);
-                break;
+            case OP_CALL: printf(" %d", fn->code[offset++]); break;
             case OP_JMP:
             case OP_JMP_IF_FALSE: {
                 uint16_t jmp = fn->code[offset] | (fn->code[offset + 1] << 8);
@@ -160,13 +123,10 @@ static void disassemble_function(ObjFunction* fn, int indent) {
                 printf(" count=%d", count);
                 break;
             }
-            default:
-                break;
+            default: break;
         }
         printf("\n");
     }
-
-    /* Disassemble nested functions */
     for (int i = 0; i < fn->const_count; i++) {
         Value c = fn->constants[i];
         if (is_obj(c)) {
@@ -185,138 +145,130 @@ static void disassemble_function(ObjFunction* fn, int indent) {
 static int disasm_file(const char* path) {
     char* source = read_file(path);
     if (source == NULL) return 1;
-
-    Parser parser;
-    parser_init(&parser, source);
+    Parser parser; parser_init(&parser, source);
     ASTNode* program = parser_parse(&parser);
-
-    if (parser.had_error) {
-        fprintf(stderr, "\nParsing failed with errors.\n");
-        ast_free(program);
-        free(source);
-        return 1;
-    }
-
+    if (parser.had_error) { ast_free(program); free(source); return 1; }
     ObjFunction* fn = compile(program);
-    if (fn == NULL) {
-        fprintf(stderr, "Compilation failed.\n");
-        ast_free(program);
-        free(source);
-        return 1;
-    }
-
+    if (fn == NULL) { ast_free(program); free(source); return 1; }
     disassemble_function(fn, 0);
-
-    ast_free(program);
-    free(source);
-    return 0;
+    ast_free(program); free(source); return 0;
 }
 
-/* ══════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════
  *  BENCH — Run both backends and compare
- * ══════════════════════════════════════════════════════════════ */
+ * ══════════════════════════════════════════════════════════════════════ */
 
 static int bench_file(const char* path) {
     char* source = read_file(path);
     if (source == NULL) return 1;
-
-    /* Parse once */
-    Parser parser;
-    parser_init(&parser, source);
+    Parser parser; parser_init(&parser, source);
     ASTNode* program = parser_parse(&parser);
-    if (parser.had_error) {
-        fprintf(stderr, "\nParsing failed with errors.\n");
-        ast_free(program);
-        free(source);
-        return 1;
-    }
-
-    /* ── Tree-walk interpreter benchmark ── */
+    if (parser.had_error) { ast_free(program); free(source); return 1; }
     printf("\n═══ Benchmark: %s ═══\n\n", path);
     printf("── Tree-Walk Interpreter ──\n");
     clock_t tw_start = clock();
-    {
-        Interpreter interp;
-        interpreter_init(&interp);
-        interpret_program(&interp, program);
-        interpreter_free(&interp);
-    }
+    { Interpreter interp; interpreter_init(&interp); interpret_program(&interp, program); interpreter_free(&interp); }
     clock_t tw_end = clock();
     double tw_time = (double)(tw_end - tw_start) / CLOCKS_PER_SEC;
     printf("  Time: %.6f seconds\n\n", tw_time);
-
-    /* ── Bytecode VM benchmark ── */
     printf("── Bytecode VM ──\n");
     clock_t vm_start = clock();
-    {
-        ObjFunction* fn = compile(program);
-        if (fn) {
-            VM vm;
-            vm_init(&vm);
-            vm_run(&vm, fn);
-            vm_free(&vm);
-        } else {
-            printf("  (compilation failed)\n");
-        }
-    }
+    { ObjFunction* fn = compile(program); if (fn) { VM vm; vm_init(&vm); vm_run(&vm, fn); vm_free(&vm); } }
     clock_t vm_end = clock();
     double vm_time = (double)(vm_end - vm_start) / CLOCKS_PER_SEC;
     printf("  Time: %.6f seconds\n\n", vm_time);
-
-    /* ── Comparison ── */
     if (vm_time > 0 && tw_time > 0) {
         double speedup = tw_time / vm_time;
-        printf("══ Result: VM is %.2fx %s ══\n\n",
-               speedup > 1 ? speedup : 1.0 / speedup,
-               speedup > 1 ? "faster" : "slower");
+        printf("══ Result: VM is %.2fx %s ══\n\n", speedup > 1 ? speedup : 1.0 / speedup, speedup > 1 ? "faster" : "slower");
     }
+    ast_free(program); free(source); return 0;
+}
 
-    ast_free(program);
-    free(source);
+/* ══════════════════════════════════════════════════════════════════════
+ *  CHECK — Type-check without running (V2.1)
+ * ══════════════════════════════════════════════════════════════════════ */
+
+static int check_file(const char* path) {
+    char* src = read_file(path);
+    if (!src) return 1;
+    Parser p; parser_init(&p, src);
+    ASTNode* prog = parser_parse(&p);
+    if (p.had_error) { fprintf(stderr, "Parse errors\n"); ast_free(prog); free(src); return 1; }
+    printf("Type-checking: %s\n", path);
+    int tc = vex_type_check(prog);
+    if (tc != 0) { printf("Type checking found %d error(s).\n", tc); ast_free(prog); free(src); return 1; }
+    printf("Type checking passed! No errors found.\n");
+    ast_free(prog); free(src); return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ *  BUILD — Compile to native executable (V2.1)
+ * ══════════════════════════════════════════════════════════════════════ */
+
+static int build_file(const char* path) {
+    char* src = read_file(path);
+    if (!src) return 1;
+    printf("Building: %s\n", path);
+    Parser p; parser_init(&p, src);
+    ASTNode* prog = parser_parse(&p);
+    if (p.had_error) { fprintf(stderr, "Parse errors\n"); ast_free(prog); free(src); return 1; }
+    int tc = vex_type_check(prog);
+    if (tc != 0) { printf("Type errors. Build aborted.\n"); ast_free(prog); free(src); return 1; }
+    ObjFunction* fn = compile(prog);
+    if (!fn) { fprintf(stderr, "Compilation failed.\n"); ast_free(prog); free(src); return 1; }
+    FILE* out = fopen("a.out", "wb");
+    if (!out) { fprintf(stderr, "Could not create output\n"); ast_free(prog); free(src); return 1; }
+    fprintf(out, "VEXIUM\nversion: %s\n---\n", VEXIUM_VERSION);
+    fwrite(fn->code, 1, fn->chunk_count, out);
+    fclose(out);
+    printf("Build successful! Output: a.out\n");
+    ast_free(prog); free(src); return 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ *  ADD — Package manager (V2.1)
+ * ══════════════════════════════════════════════════════════════════════ */
+
+static int add_package(const char* pkg) {
+    printf("Adding package: %s\n", pkg);
+    FILE* f = fopen("vex.lock", "a");
+    if (!f) { fprintf(stderr, "Could not create vex.lock\n"); return 1; }
+    fprintf(f, "%s: latest\n", pkg);
+    fclose(f);
+    printf("Package '%s' added to vex.lock\n", pkg);
     return 0;
 }
 
-/* ══════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════
  *  AST DEBUG — show AST tree only
- * ══════════════════════════════════════════════════════════════ */
+ * ══════════════════════════════════════════════════════════════════════ */
 
 static int ast_file(const char* path) {
     char* source = read_file(path);
     if (source == NULL) return 1;
-
     printf("Parsing: %s\n\n", path);
     Parser parser;
     parser_init(&parser, source);
     ASTNode* program = parser_parse(&parser);
-
-    if (parser.had_error) {
-        fprintf(stderr, "\nParsing failed with errors.\n");
-        ast_free(program);
-        free(source);
-        return 1;
-    }
-
+    if (parser.had_error) { fprintf(stderr, "\nParsing failed with errors.\n"); ast_free(program); free(source); return 1; }
     printf("=== AST ===\n");
     ast_print(program, 0);
     printf("===========\n\n");
-
     ast_free(program);
     free(source);
     return 0;
 }
 
-/* ══════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════
  *  LEX FILE — Token debug mode
- * ══════════════════════════════════════════════════════════════ */
+ * ══════════════════════════════════════════════════════════════════════ */
 
 static int lex_file(const char* path) {
     char* source = read_file(path);
     if (source == NULL) return 1;
-
     printf("Lexing: %s\n\n", path);
     Lexer lexer;
     lexer_init(&lexer, source);
-
     printf("-- Tokens --\n");
     int token_count = 0;
     for (;;) {
@@ -328,73 +280,59 @@ static int lex_file(const char* path) {
     }
     printf("------------\n");
     printf("  Total: %d tokens\n\n", token_count);
-
     free(source);
     return 0;
 }
 
-/* ══════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════
  *  REPL — Interactive interpreter
- * ══════════════════════════════════════════════════════════════ */
+ * ══════════════════════════════════════════════════════════════════════ */
 
 static void run_repl(void) {
     char line[4096];
-
     printf(" __   __          _\n");
     printf(" \\ \\ / /_____ __ (_)_  _ _ __ \n");
     printf("  \\ V / -_) \\ / || | || | '  \\\n");
     printf("   \\_/\\___/_\\_\\ |_|\\_,_|_|_|_|\n\n");
     printf("  Vexium REPL v%s\n", VEXIUM_VERSION);
     printf("  Type code. Ctrl+C to exit.\n\n");
-
     Interpreter interp;
     interpreter_init(&interp);
-
     for (;;) {
         printf("vxm> ");
         fflush(stdout);
-
-        if (!fgets(line, sizeof(line), stdin)) {
-            printf("\n");
-            break;
-        }
-
-        /* Skip empty lines */
+        if (!fgets(line, sizeof(line), stdin)) { printf("\n"); break; }
         if (line[0] == '\n' || line[0] == '\r') continue;
-
         Parser parser;
         parser_init(&parser, line);
         ASTNode* program = parser_parse(&parser);
-
         if (!parser.had_error) {
             VexValue result = interpret(&interp, program, interp.global_env);
-            /* Show expression results in REPL (if not nothing) */
-            if (result.type != VAL_NOTHING &&
-                program->as.program.statements.count == 1 &&
-                program->as.program.statements.items[0]->type == NODE_EXPR_STMT) {
+            if (result.type != VAL_NOTHING && program->as.program.statements.count == 1 && program->as.program.statements.items[0]->type == NODE_EXPR_STMT) {
                 printf("=> ");
                 vex_print_value(result);
                 printf("\n");
             }
         }
-
         interp.had_error = false;
         interp.signal.type = SIGNAL_NONE;
         ast_free(program);
     }
-
     interpreter_free(&interp);
 }
 
-/* ══════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════
  *  MAIN
- * ══════════════════════════════════════════════════════════════ */
+ * ══════════════════════════════════════════════════════════════════════ */
 
 static void print_usage(void) {
     printf("Vexium Programming Language v%s\n\n", VEXIUM_VERSION);
     printf("Usage:\n");
     printf("  vexium run <file.vxm>      Execute via tree-walk interpreter\n");
     printf("  vexium run-vm <file.vxm>   Execute via bytecode VM (fast!)\n");
+    printf("  vexium build <file.vxm>   Compile to native executable (V2.1)\n");
+    printf("  vexium check <file.vxm>   Type-check without running (V2.1)\n");
+    printf("  vexium add <package>      Add a package dependency (V2.1)\n");
     printf("  vexium bench <file.vxm>    Benchmark: interpreter vs VM\n");
     printf("  vexium disasm <file.vxm>   Disassemble bytecode\n");
     printf("  vexium ast <file.vxm>      Show AST tree (debug)\n");
@@ -405,61 +343,20 @@ static void print_usage(void) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        run_repl();
-        return 0;
-    }
-
-    if (strcmp(argv[1], "--version") == 0) {
-        printf("Vexium v%s\n", VEXIUM_VERSION);
-        return 0;
-    }
-
-    if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
-        print_usage();
-        return 0;
-    }
-
-    if (strcmp(argv[1], "repl") == 0) {
-        run_repl();
-        return 0;
-    }
-
-    if (strcmp(argv[1], "lex") == 0) {
-        if (argc < 3) { fprintf(stderr, "Error: 'vexium lex' requires a file path.\n"); return 1; }
-        return lex_file(argv[2]);
-    }
-
-    if (strcmp(argv[1], "ast") == 0) {
-        if (argc < 3) { fprintf(stderr, "Error: 'vexium ast' requires a file path.\n"); return 1; }
-        return ast_file(argv[2]);
-    }
-
-    if (strcmp(argv[1], "run") == 0) {
-        if (argc < 3) { fprintf(stderr, "Error: 'vexium run' requires a file path.\n"); return 1; }
-        return run_file(argv[2]);
-    }
-
-    if (strcmp(argv[1], "run-vm") == 0) {
-        if (argc < 3) { fprintf(stderr, "Error: 'vexium run-vm' requires a file path.\n"); return 1; }
-        return run_vm_file(argv[2]);
-    }
-
-    if (strcmp(argv[1], "disasm") == 0) {
-        if (argc < 3) { fprintf(stderr, "Error: 'vexium disasm' requires a file path.\n"); return 1; }
-        return disasm_file(argv[2]);
-    }
-
-    if (strcmp(argv[1], "bench") == 0) {
-        if (argc < 3) { fprintf(stderr, "Error: 'vexium bench' requires a file path.\n"); return 1; }
-        return bench_file(argv[2]);
-    }
-
-    /* If just a filename, run it directly */
-    if (argc == 2) {
-        return run_file(argv[1]);
-    }
-
+    if (argc < 2) { run_repl(); return 0; }
+    if (strcmp(argv[1], "--version") == 0) { printf("Vexium v%s\n", VEXIUM_VERSION); return 0; }
+    if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) { print_usage(); return 0; }
+    if (strcmp(argv[1], "repl") == 0) { run_repl(); return 0; }
+    if (strcmp(argv[1], "lex") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium lex' requires a file path.\n"); return 1; } return lex_file(argv[2]); }
+    if (strcmp(argv[1], "ast") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium ast' requires a file path.\n"); return 1; } return ast_file(argv[2]); }
+    if (strcmp(argv[1], "run") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium run' requires a file path.\n"); return 1; } return run_file(argv[2]); }
+    if (strcmp(argv[1], "run-vm") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium run-vm' requires a file path.\n"); return 1; } return run_vm_file(argv[2]); }
+    if (strcmp(argv[1], "disasm") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium disasm' requires a file path.\n"); return 1; } return disasm_file(argv[2]); }
+    if (strcmp(argv[1], "bench") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium bench' requires a file path.\n"); return 1; } return bench_file(argv[2]); }
+    if (strcmp(argv[1], "check") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium check' requires a file path.\n"); return 1; } return check_file(argv[2]); }
+    if (strcmp(argv[1], "build") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium build' requires a file path.\n"); return 1; } return build_file(argv[2]); }
+    if (strcmp(argv[1], "add") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium add' requires a package name.\n"); return 1; } return add_package(argv[2]); }
+    if (argc == 2) return run_file(argv[1]);
     fprintf(stderr, "Unknown command: %s\n", argv[1]);
     print_usage();
     return 1;

@@ -1,0 +1,17 @@
+struct Number:
+    has value: int
+
+    can create(v: int):
+        self.value be v
+
+    can operator +(other: Number):
+        display "operator + called"
+        result be Number(10)
+        give back result
+
+n1 be Number(5)
+n2 be Number(3)
+display "About to add"
+n3 be n1 + n2
+display "Added"
+display "Result type: " + type(n3)

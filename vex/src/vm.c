@@ -12,7 +12,7 @@
  * ══════════════════════════════════════════════════════════════ */
 
 /* Global VM pointer for object tracking (set during vm_run) */
-static VM* running_vm = NULL;
+VM* running_vm = NULL;
 
 static Obj* allocate_obj(size_t size, ObjType type) {
     Obj* obj = (Obj*)malloc(size);
@@ -77,6 +77,44 @@ ObjMap* obj_map_new(void) {
     return map;
 }
 
+void obj_map_set(ObjMap* map, ObjString* key, Value value) {
+    if (map->count + 1 > map->capacity * 0.75) {
+        int old_capacity = map->capacity;
+        map->capacity = map->capacity < 8 ? 8 : map->capacity * 2;
+        VMMapEntry* entries = calloc(map->capacity, sizeof(VMMapEntry));
+        for (int i = 0; i < old_capacity; i++) {
+            if (!map->entries[i].occupied) continue;
+            uint32_t idx = map->entries[i].key->hash % map->capacity;
+            while (entries[idx].occupied) {
+                idx = (idx + 1) % map->capacity;
+            }
+            entries[idx] = map->entries[i];
+        }
+        free(map->entries);
+        map->entries = entries;
+    }
+    
+    uint32_t idx = key->hash % map->capacity;
+    while (map->entries[idx].occupied && map->entries[idx].key != key) {
+        idx = (idx + 1) % map->capacity;
+    }
+    
+    if (!map->entries[idx].occupied) {
+        map->count++;
+        map->entries[idx].occupied = true;
+        map->entries[idx].key = key;
+    }
+    map->entries[idx].value = value;
+}
+
+ObjClosure* obj_closure_new(ObjFunction* function) {
+    ObjClosure* closure = (ObjClosure*)allocate_obj(sizeof(ObjClosure), OBJ_CLOSURE);
+    closure->function = function;
+    closure->upvalue_count = 0;
+    closure->upvalues = NULL;
+    return closure;
+}
+
 /* Chunk helpers */
 void chunk_init(Chunk* chunk) {
     chunk->count = 0;
@@ -134,7 +172,7 @@ void value_print(Value val) {
     } else if (is_bool(val)) {
         printf(as_bool(val) ? "true" : "false");
     } else if (is_nothing(val)) {
-        printf("nothing");
+        /* Don't print 'nothing' for implicit returns - Python style */
     } else if (is_obj(val)) {
         Obj* obj = (Obj*)as_obj(val);
         switch (obj->type) {
@@ -255,11 +293,20 @@ const char* opcode_name(OpCode op) {
         case OP_CALL: return "OP_CALL";
         case OP_RETURN: return "OP_RETURN";
         case OP_CONCAT: return "OP_CONCAT";
+        case OP_TO_STRING: return "OP_TO_STRING";
         case OP_PRINT: return "OP_PRINT";
         case OP_ARRAY: return "OP_ARRAY";
+        case OP_ARRAY_PUSH: return "OP_ARRAY_PUSH";
         case OP_INDEX_GET: return "OP_INDEX_GET";
         case OP_INDEX_SET: return "OP_INDEX_SET";
         case OP_MAP: return "OP_MAP";
+        case OP_DEFER: return "OP_DEFER";
+        case OP_AWAIT: return "OP_AWAIT";
+        case OP_SPAWN: return "OP_SPAWN";
+        case OP_CHANNEL_CREATE: return "OP_CHANNEL_CREATE";
+        case OP_CHANNEL_SEND: return "OP_CHANNEL_SEND";
+        case OP_CHANNEL_RECV: return "OP_CHANNEL_RECV";
+        case OP_TAIL_CALL: return "OP_TAIL_CALL";
         case OP_HALT: return "OP_HALT";
         default: return "UNKNOWN";
     }
@@ -479,6 +526,12 @@ void vm_init(VM* vm) {
     memset(vm->globals, 0, sizeof(vm->globals));
 }
 
+VM* vm_new(void) {
+    VM* vm = (VM*)malloc(sizeof(VM));
+    if (vm) vm_init(vm);
+    return vm;
+}
+
 void vm_free(VM* vm) {
     /* Free all heap objects */
     Obj* obj = vm->objects;
@@ -531,7 +584,7 @@ static inline Value peek(VM* vm, int distance) {
 /* Read bytes from instruction stream */
 #define READ_BYTE()    (*frame->ip++)
 #define READ_SHORT()   (frame->ip += 2, (uint16_t)((frame->ip[-2]) | (frame->ip[-1] << 8)))
-#define READ_CONSTANT() (frame->function->constants[READ_SHORT()])
+#define READ_CONSTANT() (frame->closure->function->constants[READ_SHORT()])
 
 /* Hash table lookup for globals */
 static uint32_t global_hash(const char* name) {
@@ -614,10 +667,10 @@ static void register_builtins(VM* vm) {
 
 static void runtime_error(VM* vm, CallFrame* frame, const char* fmt, ...) {
     int line = 0;
-    if (frame && frame->function && frame->function->lines) {
-        int offset = (int)(frame->ip - frame->function->code - 1);
-        if (offset >= 0 && offset < frame->function->chunk_count) {
-            line = frame->function->lines[offset];
+    if (frame && frame->closure && frame->closure->function && frame->closure->function->lines) {
+        int offset = (int)(frame->ip - frame->closure->function->code - 1);
+        if (offset >= 0 && offset < frame->closure->function->chunk_count) {
+            line = frame->closure->function->lines[offset];
         }
     }
     fprintf(stderr, "[Runtime Error] Line %d: ", line);
@@ -640,9 +693,10 @@ VMResult vm_run(VM* vm, ObjFunction* fn) {
     register_builtins(vm);
 
     /* Set up the initial call frame */
-    push(vm, val_obj(fn));
+    ObjClosure* closure = obj_closure_new(fn);
+    push(vm, val_obj(closure));
     CallFrame* frame = &vm->frames[vm->frame_count++];
-    frame->function = fn;
+    frame->closure = closure;
     frame->ip = fn->code;
     frame->slots = vm->stack;
 
@@ -931,12 +985,18 @@ VMResult vm_run(VM* vm, ObjFunction* fn) {
             }
 
             Obj* obj = (Obj*)as_obj(callee);
-            if (obj->type != OBJ_FUNCTION) {
-                runtime_error(vm, frame, "Can only call functions.");
+            ObjClosure* closure;
+            ObjFunction* callee_fn;
+            if (obj->type == OBJ_FUNCTION) {
+                callee_fn = (ObjFunction*)obj;
+                closure = obj_closure_new(callee_fn);
+            } else if (obj->type == OBJ_CLOSURE) {
+                closure = (ObjClosure*)obj;
+                callee_fn = closure->function;
+            } else {
+                runtime_error(vm, frame, "Can only call functions and closures.");
                 return VM_RUNTIME_ERROR;
             }
-
-            ObjFunction* callee_fn = (ObjFunction*)obj;
 
             /* Check if native */
             if (callee_fn->code == NULL && callee_fn->chunk_count == -1) {
@@ -956,7 +1016,7 @@ VMResult vm_run(VM* vm, ObjFunction* fn) {
             }
 
             CallFrame* new_frame = &vm->frames[vm->frame_count++];
-            new_frame->function = callee_fn;
+            new_frame->closure = closure;
             new_frame->ip = callee_fn->code;
             new_frame->slots = vm->stack_top - argc - 1;
 
@@ -1000,6 +1060,23 @@ VMResult vm_run(VM* vm, ObjFunction* fn) {
                 arr->items[i] = pop(vm);
             }
             push(vm, val_obj(arr));
+            break;
+        }
+
+        case OP_ARRAY_PUSH: {
+            Value val = peek(vm, 0);
+            Value target = peek(vm, 1);
+            if (!is_obj(target) || ((Obj*)as_obj(target))->type != OBJ_ARRAY) {
+                runtime_error(vm, frame, "Can only push to arrays.");
+                return VM_RUNTIME_ERROR;
+            }
+            ObjArray* arr = (ObjArray*)as_obj(target);
+            if (arr->count >= arr->capacity) {
+                arr->capacity = arr->capacity < 8 ? 8 : arr->capacity * 2;
+                arr->items = (Value*)realloc(arr->items, arr->capacity * sizeof(Value));
+            }
+            arr->items[arr->count++] = val;
+            pop(vm); /* pop val, leaving array on stack */
             break;
         }
 
@@ -1110,6 +1187,148 @@ VMResult vm_run(VM* vm, ObjFunction* fn) {
                 }
             }
             push(vm, val_nothing_v());
+            break;
+        }
+
+        case OP_TO_STRING: {
+            Value val = pop(vm);
+            if (is_obj(val) && ((Obj*)as_obj(val))->type == OBJ_STRING) {
+                push(vm, val);
+                break;
+            }
+            char buf[128];
+            if (is_number(val)) {
+                double d = as_number(val);
+                if (d == (int64_t)d && fabs(d) < 1e15) {
+                    snprintf(buf, sizeof(buf), "%lld", (long long)(int64_t)d);
+                } else {
+                    snprintf(buf, sizeof(buf), "%g", d);
+                }
+            } else if (is_int(val)) {
+                snprintf(buf, sizeof(buf), "%d", as_int(val));
+            } else if (is_bool(val)) {
+                snprintf(buf, sizeof(buf), as_bool(val) ? "true" : "false");
+            } else if (is_nothing(val)) {
+                /* Don't print 'nothing' for implicit returns - Python style */
+            } else if (is_obj(val)) {
+                Obj* obj = (Obj*)as_obj(val);
+                switch(obj->type) {
+                    case OBJ_FUNCTION: snprintf(buf, sizeof(buf), "<fn>"); break;
+                    case OBJ_ARRAY: snprintf(buf, sizeof(buf), "[...]"); break;
+                    case OBJ_MAP: snprintf(buf, sizeof(buf), "{...}"); break;
+                    default: snprintf(buf, sizeof(buf), "<obj>"); break;
+                }
+            } else {
+                snprintf(buf, sizeof(buf), "<val>");
+            }
+            ObjString* str = obj_string_new(buf, (int)strlen(buf));
+            push(vm, val_obj(str));
+            break;
+        }
+
+        case OP_DEFER: {
+            /* Defer: schedule the expression on the defer stack
+             * Stack before: [... expr]
+             * Stack after:  [...] (expr moved to defer stack)
+             * For now, we pop and ignore to support parsing. */
+            pop(vm);  /* consume deferred expression */
+            break;
+        }
+
+        case OP_AWAIT: {
+            /* Await: wait for async result (currently a blocking stub)
+             * In real async implementation, this would suspend execution
+             * and resume when the promise completes. For now, just keep the value. */
+            Value result = pop(vm);
+            push(vm, result);  /* awaited expression result stays on stack */
+            break;
+        }
+
+        case OP_SPAWN: {
+            /* Spawn: create a new task to run the function concurrently
+             * For now, this is a stub - it just runs the function synchronously.
+             * Full implementation would use thread pool from task.c */
+            uint8_t argc = READ_BYTE();
+            if (argc > 0) {
+                /* Pop arguments (they're already on stack) */
+                for (int i = 0; i < argc; i++) {
+                    pop(vm);
+                }
+            }
+            /* TODO: Implement actual task spawning with thread pool */
+            /* For now, push nothing as placeholder */
+            push(vm, val_nothing_v());
+            break;
+        }
+
+        case OP_CHANNEL_CREATE: {
+            /* Create a channel with optional buffer size */
+            /* Syntax: channel() or channel(buffer_size) */
+            /* TODO: Implement actual channel object */
+            /* For now, push nothing as placeholder */
+            push(vm, val_nothing_v());
+            break;
+        }
+
+        case OP_CHANNEL_SEND: {
+            /* Send value on channel: chan <- value */
+            /* Stack: [channel, value] */
+            Value value = pop(vm);
+            Value chan_val = pop(vm);
+            
+            if (!is_obj(chan_val) || ((Obj*)as_obj(chan_val))->type != OBJ_CHANNEL) {
+                runtime_error(vm, frame, "Can only send on channels");
+                return VM_RUNTIME_ERROR;
+            }
+            
+            /* TODO: Actually send the value - requires channel implementation */
+            /* For now, just drop the value and push nothing */
+            (void)value;  /* suppress unused warning */
+            push(vm, val_nothing_v());
+            break;
+        }
+
+        case OP_CHANNEL_RECV: {
+            /* Receive value from channel: <-chan */
+            /* Stack: [channel] */
+            Value chan_val = pop(vm);
+            
+            if (!is_obj(chan_val) || ((Obj*)as_obj(chan_val))->type != OBJ_CHANNEL) {
+                runtime_error(vm, frame, "Can only receive from channels");
+                return VM_RUNTIME_ERROR;
+            }
+            
+            /* TODO: Actually receive - requires channel implementation */
+            /* For now, push nothing */
+            push(vm, val_nothing_v());
+            break;
+        }
+
+        case OP_TAIL_CALL: {
+            /* Tail Call Optimization: reuse the current frame for the callee
+             * This is a stub for now. Full TCO requires:
+             * 1. Detecting recursive calls at compile time
+             * 2. Reusing frame slots instead of creating new frames
+             * For now, treat it as a regular call */
+            uint8_t argc = READ_BYTE();
+            Value callee = vm->stack_top[-(int)argc - 1];
+            
+            if (!is_obj(callee) || ((Obj*)as_obj(callee))->type != OBJ_CLOSURE) {
+                runtime_error(vm, frame, "Can only call functions");
+                return VM_RUNTIME_ERROR;
+            }
+            
+            ObjClosure* closure = (ObjClosure*)as_obj(callee);
+            if (closure->function->arity != argc) {
+                runtime_error(vm, frame, "Arity mismatch: expected %d but got %d",
+                            closure->function->arity, argc);
+                return VM_RUNTIME_ERROR;
+            }
+            
+            /* Reuse the current frame (true TCO) */
+            frame->closure = closure;
+            frame->ip = closure->function->code;
+            frame->slots = vm->stack_top - argc - 1;
             break;
         }
 

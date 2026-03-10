@@ -1,7 +1,7 @@
 #include "token.h"
 
 /* ── Return human-readable name for a token type ── */
-const char* token_type_name(TokenType type) {
+const char* token_type_name(VexiumTokenType type) {
     switch (type) {
         /* Literals */
         case TOKEN_INT:          return "INT";
@@ -18,6 +18,10 @@ const char* token_type_name(TokenType type) {
         case TOKEN_FN:           return "FN";
         case TOKEN_GIVE_BACK:    return "GIVE_BACK";
         case TOKEN_TASK:         return "TASK";
+        case TOKEN_SPAWN:        return "SPAWN";
+        case TOKEN_DEFER:        return "DEFER";
+        case TOKEN_AWAIT:        return "AWAIT";
+        case TOKEN_CHANNEL:      return "CHANNEL";
         case TOKEN_PASS:         return "PASS";
 
         /* Keywords: Control Flow */

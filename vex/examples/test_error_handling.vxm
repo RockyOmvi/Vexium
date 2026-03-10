@@ -1,0 +1,29 @@
+# Test error handling with attempt/otherwise
+
+fn might_fail(x):
+    if x is less than 0:
+        throw "Negative number not allowed!"
+    give back x * 2
+
+fn test_try_catch():
+    display "Testing attempt/otherwise..."
+    
+    # Test 1: No error
+    attempt:
+        let result be might_fail(5)
+        display "Result: "
+        display result
+    otherwise err:
+        display "Should not see this!"
+    
+    # Test 2: With error
+    attempt:
+        let result2 be might_fail(-5)
+        display "Should not see this either!"
+    otherwise err:
+        display "Caught error:"
+        display err
+    
+    display "Error handling tests complete!"
+
+test_try_catch()

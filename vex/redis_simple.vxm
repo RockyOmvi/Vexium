@@ -1,0 +1,187 @@
+# Redis Clone Library for Vexium - Simplified Version
+
+# In-memory data store using only arrays (no remove needed)
+let redis_keys be []
+let redis_values be []
+
+# Helper to count array length
+fn array_len(arr):
+    let count be 0
+    for each item in arr:
+        set count be count + 1
+    give back count
+
+# Helper: find index of key
+fn find_key_index(key):
+    let idx be 0
+    for each k in redis_keys:
+        if k == key:
+            give back idx
+        set idx be idx + 1
+    give back -1
+
+# String operations
+fn redis_set(key, value):
+    let idx be find_key_index(key)
+    if idx >= 0:
+        set redis_values[idx] be value
+    else:
+        append key to redis_keys
+        append value to redis_values
+    give back "OK"
+
+fn redis_get(key):
+    let idx be find_key_index(key)
+    if idx >= 0:
+        give back redis_values[idx]
+    give back nothing
+
+fn redis_del(key):
+    let idx be find_key_index(key)
+    if idx >= 0:
+        set redis_values[idx] be nothing
+        give back 1
+    give back 0
+
+fn redis_key_exists(key):
+    let idx be find_key_index(key)
+    if idx >= 0:
+        if redis_values[idx] != nothing:
+            give back 1
+    give back 0
+
+# List operations
+let list_names be []
+let list_data be []
+
+fn find_list_index(name):
+    let idx be 0
+    for each n in list_names:
+        if n == name:
+            give back idx
+        set idx be idx + 1
+    give back -1
+
+fn redis_lpush(name, value):
+    let idx be find_list_index(name)
+    if idx < 0:
+        append name to list_names
+        append [] to list_data
+        let new_idx be 0
+        for each lst in list_data:
+            set new_idx be new_idx + 1
+        set idx be new_idx - 1
+    
+    let new_list be [value]
+    let old_list be list_data[idx]
+    for each item in old_list:
+        append item to new_list
+    set list_data[idx] be new_list
+    
+    let count be 0
+    for each item in new_list:
+        set count be count + 1
+    give back count
+
+fn redis_rpush(name, value):
+    let idx be find_list_index(name)
+    if idx < 0:
+        append name to list_names
+        append [] to list_data
+        let new_idx be 0
+        for each lst in list_data:
+            set new_idx be new_idx + 1
+        set idx be new_idx - 1
+    
+    append value to list_data[idx]
+    
+    let count be 0
+    for each item in list_data[idx]:
+        set count be count + 1
+    give back count
+
+fn redis_lpop(name):
+    let idx be find_list_index(name)
+    if idx < 0:
+        give back nothing
+    let lst be list_data[idx]
+    
+    let lst_len be 0
+    for each item in lst:
+        set lst_len be lst_len + 1
+    if lst_len == 0:
+        give back nothing
+    
+    let val be lst[0]
+    let new_list be []
+    let i be 1
+    while i < lst_len:
+        append lst[i] to new_list
+        set i be i + 1
+    set list_data[idx] be new_list
+    give back val
+
+fn redis_rpop(name):
+    let idx be find_list_index(name)
+    if idx < 0:
+        give back nothing
+    let lst be list_data[idx]
+    
+    let lst_len be 0
+    for each item in lst:
+        set lst_len be lst_len + 1
+    if lst_len == 0:
+        give back nothing
+    
+    let last_idx be lst_len - 1
+    let val be lst[last_idx]
+    let new_list be []
+    let i be 0
+    while i < last_idx:
+        append lst[i] to new_list
+        set i be i + 1
+    set list_data[idx] be new_list
+    give back val
+
+fn redis_llen(name):
+    let idx be find_list_index(name)
+    if idx < 0:
+        give back 0
+    let count be 0
+    for each item in list_data[idx]:
+        set count be count + 1
+    give back count
+
+fn redis_lrange(name, start, stop):
+    let idx be find_list_index(name)
+    if idx < 0:
+        give back []
+    let lst be list_data[idx]
+    let result be []
+    
+    let lst_len be 0
+    for each item in lst:
+        set lst_len be lst_len + 1
+    
+    let end be stop
+    if stop < 0:
+        set end be lst_len + stop + 1
+    
+    let i be start
+    while i < end:
+        if i >= 0 and i < lst_len:
+            append lst[i] to result
+        set i be i + 1
+    give back result
+
+# Exports
+let set be redis_set
+let get be redis_get
+let delete be redis_del
+let key_exists be redis_key_exists
+let lpush be redis_lpush
+let rpush be redis_rpush
+let lpop be redis_lpop
+let rpop be redis_rpop
+let llen be redis_llen
+let lrange be redis_lrange

@@ -1,0 +1,12 @@
+src/compiler.c: In function 'compile_expression':
+src/compiler.c:401:35: warning: implicit declaration of function 'compile_lambda' [-Wimplicit-function-declaration]
+         case NODE_LAMBDA:         compile_lambda(node); break;
+                                   ^~~~~~~~~~~~~~
+src/compiler.c: At top level:
+src/compiler.c:817:13: warning: conflicting types for 'compile_lambda'
+ static void compile_lambda(ASTNode* node) {
+             ^~~~~~~~~~~~~~
+src/compiler.c:817:13: error: static declaration of 'compile_lambda' follows non-static declaration
+src/compiler.c:401:35: note: previous implicit declaration of 'compile_lambda' was here
+         case NODE_LAMBDA:         compile_lambda(node); break;
+                                   ^~~~~~~~~~~~~~

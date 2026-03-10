@@ -1,0 +1,441 @@
+# ═══════════════════════════════════════════════════════════════════
+# Shell Library for Vexium
+# Build Your Own Shell / Command Line Interface
+# ═══════════════════════════════════════════════════════════════════
+
+# Command parser
+struct CommandParser:
+    has input
+    has position
+    
+    can create(input):
+        set self.input be input
+        set self.position be 0
+    
+    can parse:
+        let commands be []
+        let current be ""
+        let in_quotes be false
+        let quote_char be ""
+        let redirect_output be nothing
+        let redirect_input be nothing
+        let pipe_to be nothing
+        
+        let i be 0
+        while i < len(self.input):
+            let c be self.input[i]
+            
+            if c == "'" or c == '"':
+                if in_quotes and c == quote_char:
+                    set in_quotes be false
+                    set quote_char be ""
+                elif not in_quotes:
+                    set in_quotes be true
+                    set quote_char be c
+                else:
+                    set current be current + c
+            elif c == "|" and not in_quotes:
+                # Pipe
+                if len(current) > 0:
+                    append current.trim() to commands
+                    set current be ""
+                set pipe_to be true
+            elif c == ">" and not in_quotes:
+                # Output redirect
+                if len(current) > 0:
+                    append current.trim() to commands
+                    set current be ""
+                set redirect_output be true
+            elif c == "<" and not in_quotes:
+                # Input redirect
+                if len(current) > 0:
+                    append current.trim() to commands
+                    set current be ""
+                set redirect_input be true
+            elif c == " " and not in_quotes:
+                if len(current) > 0:
+                    append current.trim() to commands
+                    set current be ""
+            else:
+                set current be current + c
+            
+            set i be i + 1
+        
+        if len(current) > 0:
+            append current.trim() to commands
+        
+        give back {
+            "args": commands,
+            "redirect_output": redirect_output,
+            "redirect_input": redirect_input,
+            "pipe": pipe_to
+        }
+    
+    can next_token:
+        if self.position >= len(self.input):
+            give back nothing
+        
+        let token be ""
+        while self.position < len(self.input):
+            let c be self.input[self.position]
+            if c == " ":
+                if len(token) > 0:
+                    give back token
+            else:
+                set token be token + c
+            set self.position be self.position + 1
+        
+        if len(token) > 0:
+            give back token
+        give back nothing
+
+
+# Shell built-in commands
+struct Builtins:
+    has variables
+    has aliases
+    has history
+    has working_directory
+    
+    can create:
+        set self.variables be {}
+        set self.aliases be {}
+        set self.history be []
+        set self.working_directory be "/"
+        
+        # Set default environment variables
+        set self.variables["HOME"] be "/home/user"
+        set self.variables["PATH"] be "/bin:/usr/bin"
+        set self.variables["SHELL"] be "vexium_shell"
+        set self.variables["USER"] be "user"
+        set self.variables["PWD"] be "/home/user"
+    
+    can echo(args):
+        let output be ""
+        for i in 1 to len(args):
+            if i > 1:
+                set output be output + " "
+            set output be output + args[i]
+        give back output
+    
+    can cd(path):
+        if len(path) == 0:
+            set path be self.variables["HOME"]
+        
+        # Simplified directory change
+        set self.working_directory be path
+        set self.variables["PWD"] be path
+        give back nothing
+    
+    can pwd:
+        give back self.working_directory
+    
+    can set_var(name, value):
+        set self.variables[name] be value
+        give back nothing
+    
+    can get_var(name):
+        if name in self.variables:
+            give back self.variables[name]
+        give back nothing
+    
+    can export(args):
+        for each arg in args:
+            let parts be arg.split("=")
+            if len(parts) == 2:
+                set self.variables[parts[0]] be parts[1]
+        give back nothing
+    
+    can alias(name, value):
+        set self.aliases[name] be value
+        give back nothing
+    
+    can unalias(name):
+        if name in self.aliases:
+            remove name from self.aliases
+        give back nothing
+    
+    can history_add(command):
+        append command to self.history
+        # Keep only last 100 commands
+        if len(self.history) > 100:
+            remove at 0 from self.history
+    
+    can history:
+        let result be []
+        for i in 0 to len(self.history):
+            append str(i + 1) + "  " + self.history[i] to result
+        give back result
+    
+    can env:
+        let result be []
+        for each key in self.variables:
+            append key + "=" + self.variables[key] to result
+        give back result
+    
+    can exit(code):
+        # Would terminate shell in real implementation
+        give back code
+    
+    can source(file):
+        # Would read and execute commands from file
+        give back {"status": "sourced", "file": file}
+
+
+# Shell job control
+struct Job:
+    has id
+    has command
+    has status
+    has pid
+    has exit_code
+    
+    can create(id, command):
+        set self.id be id
+        set self.command be command
+        set self.status be "running"
+        set self.pid be 0
+        set self.exit_code be nothing
+    
+    can start:
+        set self.status be "running"
+    
+    can pause:
+        set self.status be "stopped"
+    
+    can complete(exit_code):
+        set self.status be "done"
+        set self.exit_code be exit_code
+    
+    can is_running:
+        give back self.status == "running"
+
+
+# Job control manager
+struct JobControl:
+    has jobs
+    has next_job_id
+    has foreground_job
+    
+    can create:
+        set self.jobs be []
+        set self.next_job_id be 1
+        set self.foreground_job be nothing
+    
+    can add_job(command):
+        let job be Job.create(self.next_job_id, command)
+        set self.next_job_id be self.next_job_id + 1
+        append job to self.jobs
+        give back job
+    
+    can list_jobs:
+        give back self.jobs
+    
+    can bring_to_foreground(job_id):
+        for each job in self.jobs:
+            if job.id == job_id:
+                set self.foreground_job be job
+                job.start()
+                give back job
+        give back nothing
+    
+    can send_to_background(job_id):
+        for each job in self.jobs:
+            if job.id == job_id:
+                job.pause()
+                give back job
+        give back nothing
+    
+    can wait_for_job(job_id):
+        # Would wait for job to complete
+        give back nothing
+
+
+# File system operations
+struct FileSystem:
+    has current_dir
+    has root
+    
+    can create:
+        set self.current_dir be "/"
+        set self.root be {
+            "/": {
+                "type": "directory",
+                "contents": {}
+            }
+        }
+    
+    can list_dir(path):
+        if path == "/":
+            let contents be []
+            for each key in self.root["/"]["contents"]:
+                append key to contents
+            give back contents
+        
+        # Navigate to path
+        let parts be path.split("/")
+        let current be self.root["/"]
+        
+        for each part in parts:
+            if len(part) > 0 and part in current["contents"]:
+                set current be current["contents"][part]
+        
+        if current["type"] == "directory":
+            let contents be []
+            for each key in current["contents"]:
+                append key to contents
+            give back contents
+        
+        give back []
+    
+    can file_exists(path):
+        give back false  # Simplified
+    
+    can is_directory(path):
+        give back false  # Simplified
+    
+    can read_file(path):
+        give back ""  # Simplified
+    
+    can write_file(path, content):
+        give back true  # Simplified
+
+
+# Shell expansion (globbing, variables, etc.)
+struct ShellExpansion:
+    can expand(input, variables):
+        let result be input
+        
+        # Variable expansion: $VAR or ${VAR}
+        for each var_name in variables:
+            let pattern be "$" + var_name
+            while result.contains(pattern):
+                set result be result.replace(pattern, variables[var_name])
+        
+        # Tilde expansion
+        while result.contains("~"):
+            set result be result.replace("~", variables["HOME"])
+        
+        give back result
+    
+    can glob_expand(pattern):
+        # Simple glob matching
+        let matches be []
+        # Would expand glob patterns
+        give back matches
+    
+    can brace_expand(input):
+        # Expand {a,b,c} to a b c
+        let result be input
+        # Simplified implementation
+        give back result
+
+
+# Shell main class
+struct Shell:
+    has parser
+    has builtins
+    has job_control
+    has filesystem
+    has prompt
+    can create:
+        set self.parser be CommandParser.create("")
+        set self.builtins be Builtins.create()
+        set self.job_control be JobControl.create()
+        set self.filesystem be FileSystem.create()
+        set self.prompt be "vexium> "
+    
+    can set_prompt(format):
+        set self.prompt be format
+    
+    can execute(command):
+        let parsed be self.parser.parse(command)
+        let args be parsed["args"]
+        
+        if len(args) == 0:
+            give back ""
+        
+        let cmd be args[0]
+        
+        # Check aliases
+        if cmd in self.builtins.aliases:
+            set cmd be self.builtins.aliases[cmd]
+        
+        # Built-in commands
+        if cmd == "echo":
+            give back self.builtins.echo(args)
+        elif cmd == "cd":
+            self.builtins.cd(args[1] if len(args) > 1 else "")
+            give back ""
+        elif cmd == "pwd":
+            give back self.builtins.pwd()
+        elif cmd == "set":
+            if len(args) > 2:
+                self.builtins.set_var(args[1], args[2])
+            give back ""
+        elif cmd == "export":
+            self.builtins.export(args[1:])
+            give back ""
+        elif cmd == "alias":
+            if len(args) > 2:
+                self.builtins.alias(args[1], args[2])
+            give back ""
+        elif cmd == "unalias":
+            if len(args) > 1:
+                self.builtins.unalias(args[1])
+            give back ""
+        elif cmd == "history":
+            let hist be self.builtins.history()
+            give back "\n".join(hist)
+        elif cmd == "env":
+            let env_vars be self.builtins.env()
+            give back "\n".join(env_vars)
+        elif cmd == "exit":
+            let code be to_number(args[1]) if len(args) > 1 else 0
+            give back self.builtins.exit(code)
+        elif cmd == "ls":
+            let path be args[1] if len(args) > 1 else self.builtins.working_directory
+            let contents be self.filesystem.list_dir(path)
+            give back " ".join(contents)
+        elif cmd == "true":
+            give back "0"
+        elif cmd == "false":
+            give back "1"
+        elif cmd == "exit":
+            give back ""
+        
+        # External command (would fork/exec in real implementation)
+        give back "Command not found: " + cmd
+    
+    can run_interactive:
+        display "Vexium Shell - Type 'exit' to quit"
+        
+        while true:
+            display self.prompt be nothing
+            # Would read input
+            # Would execute command
+            # Would display output
+        
+        give back 0
+    
+    can run_script(filename):
+        # Would read and execute script file
+        give back 0
+
+
+# Alias helper functions
+can parse_command_line(input):
+    let parser be CommandParser.create(input)
+    give back parser.parse()
+
+can expand_variables(input, variables):
+    let expander be ShellExpansion.create()
+    give back expander.expand(input, variables)
+
+
+# Export
+export {
+    CommandParser, Builtins, Job, JobControl, FileSystem,
+    ShellExpansion, Shell,
+    parse_command_line, expand_variables
+}

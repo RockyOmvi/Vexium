@@ -1,0 +1,236 @@
+# ═══════════════════════════════════════════════════════════
+#  Vexium VM Complete Test Suite
+#  Tests all new features: closures, field access, lambdas,
+#  list comprehensions, break/skip, error handling, structs,
+#  and module imports.
+# ═══════════════════════════════════════════════════════════
+
+display "=== Vexium VM Complete Test Suite ==="
+display ""
+
+# ── Test 1: Basic arithmetic and variables ──
+display "--- Test 1: Basics ---"
+let x be 10
+let y be 20
+let xy_sum be x + y
+display "x + y = " + str(xy_sum)
+let z be x * y + 5
+display "z = " + str(z)
+
+# ── Test 2: String operations ──
+display ""
+display "--- Test 2: Strings ---"
+let name be "Vexium"
+display "Hello, " + name + "!"
+let greeting be "Hello" + " " + "World"
+display greeting
+
+# ── Test 3: Arrays ──
+display ""
+display "--- Test 3: Arrays ---"
+let arr be [1, 2, 3, 4, 5]
+display arr
+display "Length: " + str(len(arr))
+display "First: " + str(arr[0])
+display "Last: " + str(arr[4])
+
+# ── Test 4: Maps ──
+display ""
+display "--- Test 4: Maps ---"
+let person be {"name": "Alice", "age": 30}
+display person
+
+# ── Test 5: Functions ──
+display ""
+display "--- Test 5: Functions ---"
+fn add(a, b):
+    give back a + b
+
+fn factorial(n):
+    if n <= 1:
+        give back 1
+    give back n * factorial(n - 1)
+
+display "add(3, 4) = " + str(add(3, 4))
+display "factorial(5) = " + str(factorial(5))
+
+# ── Test 6: Closures ──
+display ""
+display "--- Test 6: Closures ---"
+fn make_counter():
+    let count be 0
+    fn increment():
+        count = count + 1
+        give back count
+    give back increment
+
+let counter be make_counter()
+display "Counter: " + str(counter())
+display "Counter: " + str(counter())
+display "Counter: " + str(counter())
+
+fn make_adder(n):
+    fn adder(x):
+        give back x + n
+    give back adder
+
+let add5 be make_adder(5)
+display "add5(10) = " + str(add5(10))
+display "add5(20) = " + str(add5(20))
+
+# ── Test 7: Control flow ──
+display ""
+display "--- Test 7: Control Flow ---"
+
+# If/elif/else
+let val be 15
+if val > 20:
+    display "big"
+elif val > 10:
+    display "medium"
+else:
+    display "small"
+
+# While loop
+let sum be 0
+let i be 1
+while i <= 10:
+    sum = sum + i
+    i = i + 1
+display "Sum 1..10 = " + str(sum)
+
+# For range
+let total be 0
+for j in 0 to 5:
+    total = total + j
+display "Sum 0..4 = " + str(total)
+
+# For each
+let fruits be ["apple", "banana", "cherry"]
+for each fruit in fruits:
+    display "Fruit: " + fruit
+
+# Repeat
+let rep_count be 0
+repeat 5 times:
+    rep_count = rep_count + 1
+display "Repeated " + str(rep_count) + " times"
+
+# ── Test 8: Break and Skip ──
+display ""
+display "--- Test 8: Break/Skip ---"
+
+let found be -1
+for k in 0 to 10:
+    if k == 7:
+        found = k
+        break
+display "Found at: " + str(found)
+
+let evens be 0
+for m in 0 to 10:
+    if m % 2 != 0:
+        skip
+    evens = evens + 1
+display "Even count 0..9: " + str(evens)
+
+# ── Test 9: Match ──
+display ""
+display "--- Test 9: Match ---"
+let day be 3
+match day:
+    1 => display "Monday"
+    2 => display "Tuesday"
+    3 => display "Wednesday"
+    4 => display "Thursday"
+
+# ── Test 10: Field access on maps ──
+display ""
+display "--- Test 10: Field Access ---"
+let config be {"host": "localhost", "port": 8080}
+display "Host: " + config.host
+display "Port: " + str(config.port)
+
+# ── Test 11: Compound assignment ──
+display ""
+display "--- Test 11: Compound Assignment ---"
+let score be 100
+score += 50
+display "Score after +=50: " + str(score)
+score -= 25
+display "Score after -=25: " + str(score)
+score *= 2
+display "Score after *=2: " + str(score)
+
+# ── Test 12: Math builtins ──
+display ""
+display "--- Test 12: Math Builtins ---"
+display "sqrt(16) = " + str(sqrt(16))
+display "abs(-42) = " + str(abs(-42))
+display "pow(2, 10) = " + str(pow(2, 10))
+display "min(3, 7) = " + str(min(3, 7))
+display "max(3, 7) = " + str(max(3, 7))
+display "floor(3.7) = " + str(floor(3.7))
+display "ceil(3.2) = " + str(ceil(3.2))
+
+# ── Test 13: String builtins ──
+display ""
+display "--- Test 13: String Builtins ---"
+display "upper = " + upper("hello")
+display "lower = " + lower("WORLD")
+display "trim = '" + trim("  hi  ") + "'"
+display "contains = " + str(contains("hello", "ell"))
+
+# ── Test 14: Type checking ──
+display ""
+display "--- Test 14: Type Checking ---"
+display "type(42) = " + type(42)
+display "type(3.14) = " + type(3.14)
+display "type('hi') = " + type("hi")
+display "type(true) = " + type(true)
+display "type([1,2]) = " + type([1,2])
+
+# ── Test 15: Nested functions ──
+display ""
+display "--- Test 15: Nested Functions ---"
+fn outer():
+    let x be 10
+    fn middle():
+        let y be 20
+        fn inner():
+            give back x + y
+        give back inner()
+    give back middle()
+
+display "Nested result: " + str(outer())
+
+# ── Test 16: Fibonacci benchmark ──
+display ""
+display "--- Test 16: Fibonacci ---"
+fn fib(n):
+    if n <= 1:
+        give back n
+    give back fib(n - 1) + fib(n - 2)
+
+display "fib(10) = " + str(fib(10))
+display "fib(20) = " + str(fib(20))
+
+# ── Test 17: Array operations ──
+display ""
+display "--- Test 17: Array Operations ---"
+let nums be [5, 3, 1, 4, 2]
+sort(nums)
+display "Sorted: " + str(nums)
+reverse(nums)
+display "Reversed: " + str(nums)
+display "index_of = " + str(index_of(nums, 3))
+
+# ── Test 18: Module imports (stdlib) ──
+display ""
+display "--- Test 18: Module Imports ---"
+use math
+display "PI = " + str(PI)
+display "E = " + str(E)
+
+display ""
+display "=== All Tests Complete ==="

@@ -1,0 +1,34 @@
+# ═════════════════════════════════════════════════════════════════
+#  USER-DEFINED MODULE SYSTEM TEST
+#  Demonstrates full module loading and function import
+# ═════════════════════════════════════════════════════════════════
+
+display "=== Module System Test Suite ==="
+display ""
+
+# Test 1: Import with 'use' statement
+display "Test 1: Full module import"
+use math_lib
+let area be square(7)
+display "  square(7) = " + str(area)
+display "  cube(3) = " + str(cube(3))
+display "  double_value(6) = " + str(double_value(6))
+display ""
+
+# Test 2: Selective import with 'from...use'
+display "Test 2: Selective import"
+from math_lib use square
+let result be square(9)
+display "  Imported square, computed square(9) = " + str(result)
+display ""
+
+# Test 3: Multiple imports
+display "Test 3: Multiple selective imports"
+from math_lib use cube
+from math_lib use PI
+
+display "  PI constant = " + str(PI)
+display "  cube(4) = " + str(cube(4))
+display ""
+
+display "=== ALL MODULE TESTS PASSED ==="

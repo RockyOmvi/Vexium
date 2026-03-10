@@ -31,7 +31,7 @@ static bool match(Lexer* lexer, char expected) {
     return true;
 }
 
-static Token make_token(Lexer* lexer, TokenType type) {
+static Token make_token(Lexer* lexer, VexiumTokenType type) {
     Token token;
     token.type = type;
     token.start = lexer->start;
@@ -51,7 +51,7 @@ static Token error_token(Lexer* lexer, const char* message) {
     return token;
 }
 
-static Token synthetic_token(Lexer* lexer, TokenType type) {
+static Token synthetic_token(Lexer* lexer, VexiumTokenType type) {
     Token token;
     token.type = type;
     token.start = "";
@@ -87,7 +87,7 @@ static void skip_comment(Lexer* lexer) {
 typedef struct {
     const char* name;
     int length;
-    TokenType type;
+    VexiumTokenType type;
 } Keyword;
 
 static Keyword keywords[] = {
@@ -96,6 +96,11 @@ static Keyword keywords[] = {
     {"const",     5,  TOKEN_CONST},
     {"fn",        2,  TOKEN_FN},
     {"task",      4,  TOKEN_TASK},
+    {"spawn",     5,  TOKEN_SPAWN},
+    {"defer",     5,  TOKEN_DEFER},
+    {"await",     5,  TOKEN_AWAIT},
+    {"yield",     5,  TOKEN_YIELD},
+    {"channel",   7,  TOKEN_CHANNEL},
     {"pass",      4,  TOKEN_PASS},
     {"if",        2,  TOKEN_IF},
     {"elif",      4,  TOKEN_ELIF},
@@ -111,6 +116,8 @@ static Keyword keywords[] = {
     {"break",     5,  TOKEN_BREAK},
     {"skip",      4,  TOKEN_SKIP},
     {"match",     5,  TOKEN_MATCH},
+    {"when",      4,  TOKEN_WHEN},
+    {"where",     5,  TOKEN_WHERE},
     {"and",       3,  TOKEN_AND},
     {"or",        2,  TOKEN_OR},
     {"not",       3,  TOKEN_NOT},
@@ -124,6 +131,9 @@ static Keyword keywords[] = {
     {"has",       3,  TOKEN_HAS},
     {"can",       3,  TOKEN_CAN},
     {"self",      4,  TOKEN_SELF},
+    {"trait",     5,  TOKEN_TRAIT},
+    {"impl",      4,  TOKEN_IMPL},
+    {"operator",  8,  TOKEN_OPERATOR},
     {"attempt",   7,  TOKEN_ATTEMPT},
     {"otherwise", 9,  TOKEN_OTHERWISE},
     {"unsafe",    6,  TOKEN_UNSAFE},
@@ -133,7 +143,7 @@ static Keyword keywords[] = {
     {NULL,        0,  TOKEN_ERROR}
 };
 
-static TokenType check_keyword(const char* start, int length) {
+static VexiumTokenType check_keyword(const char* start, int length) {
     for (int i = 0; keywords[i].name != NULL; i++) {
         if (keywords[i].length == length &&
             memcmp(keywords[i].name, start, length) == 0) {
@@ -212,7 +222,7 @@ static Token scan_identifier(Lexer* lexer) {
     }
 
     int length = (int)(lexer->current - lexer->start);
-    TokenType type = check_keyword(lexer->start, length);
+    VexiumTokenType type = check_keyword(lexer->start, length);
 
     /* ── Handle multi-word keywords ── */
 
@@ -229,6 +239,58 @@ static Token scan_identifier(Lexer* lexer) {
             return make_token(lexer, TOKEN_GIVE_BACK);
         }
         /* not "give back" — backtrack */
+        lexer->current = saved;
+        lexer->column = saved_col;
+    }
+
+    /* "greater than", "greater than or equal" */
+    if (type == TOKEN_IDENTIFIER && length == 7 && memcmp(lexer->start, "greater", 7) == 0) {
+        const char* saved = lexer->current;
+        int saved_col = lexer->column;
+        while (peek(lexer) == ' ') advance(lexer);
+        if (memcmp(lexer->current, "than", 4) == 0 && !isalnum(lexer->current[4]) && lexer->current[4] != '_') {
+            lexer->current += 4; lexer->column += 4;
+            const char* saved_than = lexer->current;
+            int saved_col_than = lexer->column;
+            while (peek(lexer) == ' ') advance(lexer);
+            if (memcmp(lexer->current, "or", 2) == 0 && !isalnum(lexer->current[2]) && lexer->current[2] != '_') {
+                lexer->current += 2; lexer->column += 2;
+                while (peek(lexer) == ' ') advance(lexer);
+                if (memcmp(lexer->current, "equal", 5) == 0 && !isalnum(lexer->current[5]) && lexer->current[5] != '_') {
+                    lexer->current += 5; lexer->column += 5;
+                    return make_token(lexer, TOKEN_GTE);
+                }
+            }
+            lexer->current = saved_than;
+            lexer->column = saved_col_than;
+            return make_token(lexer, TOKEN_GT);
+        }
+        lexer->current = saved;
+        lexer->column = saved_col;
+    }
+
+    /* "less than", "less than or equal" */
+    if (type == TOKEN_IDENTIFIER && length == 4 && memcmp(lexer->start, "less", 4) == 0) {
+        const char* saved = lexer->current;
+        int saved_col = lexer->column;
+        while (peek(lexer) == ' ') advance(lexer);
+        if (memcmp(lexer->current, "than", 4) == 0 && !isalnum(lexer->current[4]) && lexer->current[4] != '_') {
+            lexer->current += 4; lexer->column += 4;
+            const char* saved_than = lexer->current;
+            int saved_col_than = lexer->column;
+            while (peek(lexer) == ' ') advance(lexer);
+            if (memcmp(lexer->current, "or", 2) == 0 && !isalnum(lexer->current[2]) && lexer->current[2] != '_') {
+                lexer->current += 2; lexer->column += 2;
+                while (peek(lexer) == ' ') advance(lexer);
+                if (memcmp(lexer->current, "equal", 5) == 0 && !isalnum(lexer->current[5]) && lexer->current[5] != '_') {
+                    lexer->current += 5; lexer->column += 5;
+                    return make_token(lexer, TOKEN_LTE);
+                }
+            }
+            lexer->current = saved_than;
+            lexer->column = saved_col_than;
+            return make_token(lexer, TOKEN_LT);
+        }
         lexer->current = saved;
         lexer->column = saved_col;
     }

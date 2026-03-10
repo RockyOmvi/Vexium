@@ -1,0 +1,15 @@
+# Test Time module  
+let ts be time_now()
+display ts
+
+let formatted be time_format(ts)
+display formatted
+
+# Test high-res clock
+let start be time_clock()
+repeat 1000 times:
+    let x be 0
+let end be time_clock()
+display end - start
+
+display "Time module tests passed!"

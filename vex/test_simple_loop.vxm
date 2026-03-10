@@ -1,0 +1,16 @@
+# Simple loop test
+
+let total be 0
+for j in 0 to 5:
+    display "j = " + str(j)
+    total = total + j
+
+display "Total: " + str(total)
+
+# Test repeat
+let count be 0
+repeat 5 times:
+    count = count + 1
+    display "Count: " + str(count)
+
+display "Final count: " + str(count)

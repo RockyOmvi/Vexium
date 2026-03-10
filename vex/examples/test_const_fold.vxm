@@ -1,0 +1,29 @@
+# Test constant folding optimization
+# These expressions should be evaluated at compile time
+
+let a be 2 + 3
+display a
+
+let b be 10 * 5
+display b
+
+let c be -42
+display c
+
+let d be not true
+display d
+
+let e be 3.14 * 2.0
+display e
+
+let f be 10 < 5
+display f
+
+let g be 1 + 2 + 3 + 4 + 5
+display g
+
+# String concatenation
+let h be "Hello, " + "World!"
+display h
+
+display "Constant folding test complete!"

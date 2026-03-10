@@ -1,0 +1,110 @@
+# Test: Operator Overloading
+# Define custom behavior for operators on structs
+
+struct Vector:
+    has x: float
+    has y: float
+    
+    can create(x_val: float, y_val: float):
+        self.x be x_val
+        self.y be y_val
+    
+    can print_info():
+        display "Vector(" + type(self.x) + ", " + type(self.y) + ")"
+    
+    # Operator overloading: vector addition
+    can operator +(other: Vector) -> Vector:
+        result be Vector(self.x + other.x, self.y + other.y)
+        give back result
+    
+    # Operator overloading: vector subtraction  
+    can operator -(other: Vector) -> Vector:
+        result be Vector(self.x - other.x, self.y - other.y)
+        give back result
+    
+    # Operator overloading: scalar multiplication
+    can operator *(scalar: float) -> Vector:
+        result be Vector(self.x * scalar, self.y * scalar)
+        give back result
+    
+    # Operator overloading: equality
+    can operator ==(other: Vector) -> bool:
+        give back self.x == other.x and self.y == other.y
+
+struct Complex:
+    has real: float
+    has imag: float
+    
+    can create(r: float, i: float):
+        self.real be r
+        self.imag be i
+    
+    # Complex number addition
+    can operator +(other: Complex) -> Complex:
+        result be Complex(
+            self.real + other.real,
+            self.imag + other.imag
+        )
+        give back result
+    
+    # Complex number multiplication
+    can operator *(other: Complex) -> Complex:
+        real_part be self.real * other.real - self.imag * other.imag
+        imag_part be self.real * other.imag + self.imag * other.real
+        result be Complex(real_part, imag_part)
+        give back result
+
+fn test_vector_ops():
+    display "=== Testing Vector Operator Overloading ==="
+    
+    v1 be Vector(3.0, 4.0)
+    v2 be Vector(1.0, 2.0)
+    
+    display "v1 = "
+    v1.print_info()
+    display "v2 = "
+    v2.print_info()
+    display ""
+    
+    # Vector addition
+    v_sum be v1 + v2
+    display "v1 + v2 = "
+    v_sum.print_info()
+    
+    # Vector subtraction
+    v_diff be v1 - v2
+    display "v1 - v2 = "
+    v_diff.print_info()
+    
+    # Scalar multiplication
+    v_scaled be v1 * 2.0
+    display "v1 * 2.0 = "
+    v_scaled.print_info()
+    
+    # Equality
+    v3 be Vector(3.0, 4.0)
+    display "v1 == v3: " + type(v1 == v3)
+    display "v1 == v2: " + type(v1 == v2)
+
+fn test_complex_ops():
+    display "=== Testing Complex Number Operator Overloading ==="
+    
+    c1 be Complex(1.0, 2.0)
+    c2 be Complex(3.0, 4.0)
+    
+    display "c1 = " + type(c1.real) + " + " + type(c1.imag) + "i"
+    display "c2 = " + type(c2.real) + " + " + type(c2.imag) + "i"
+    display ""
+    
+    # Complex addition
+    c_sum be c1 + c2
+    display "c1 + c2 = " + type(c_sum.real) + " + " + type(c_sum.imag) + "i"
+    
+    # Complex multiplication
+    c_prod be c1 * c2
+    display "c1 * c2 = " + type(c_prod.real) + " + " + type(c_prod.imag) + "i"
+
+# Run tests
+test_vector_ops()
+display ""
+test_complex_ops()

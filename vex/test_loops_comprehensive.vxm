@@ -1,0 +1,26 @@
+# Test for-range loop
+let sum1 be 0
+for i in 0 to 5:
+    sum1 be sum1 + i
+
+# Test for-each loop  
+let sum2 be 0
+for each x in [1, 2, 3]:
+    sum2 be sum2 + x
+
+# Test repeat loop
+let sum3 be 0
+repeat 3 times:
+    sum3 be sum3 + 1
+
+# Test while loop
+let sum4 be 0
+let j be 0
+while j < 3:
+    sum4 be sum4 + j
+    j be j + 1
+
+display "for-range (0 to 5): " + sum1
+display "for-each sum: " + sum2
+display "repeat sum: " + sum3
+display "while sum: " + sum4

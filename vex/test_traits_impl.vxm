@@ -1,0 +1,101 @@
+# Test: Traits and Trait Implementations
+# Traits define a set of methods that types must implement
+# Similar to interfaces in other languages
+
+trait Shape:
+    can area() -> float
+    can perimeter() -> float
+    can describe() -> str
+
+trait Drawable:
+    can draw() -> nothing
+    can get_color() -> str
+
+struct Circle:
+    has radius: float
+    has color: str
+    
+    can create(r: float, c: str):
+        self.radius be r
+        self.color be c
+
+struct Rectangle:
+    has width: float
+    has height: float
+    has color: str
+    
+    can create(w: float, h: float, c: str):
+        self.width be w
+        self.height be h
+        self.color be c
+
+# Implement Shape trait for Circle
+impl Shape for Circle:
+    can area() -> float:
+        give back 3.14159 * self.radius * self.radius
+    
+    can perimeter() -> float:
+        give back 2.0 * 3.14159 * self.radius
+    
+    can describe() -> str:
+        give back "Circle with radius " + type(self.radius)
+
+# Implement Shape trait for Rectangle
+impl Shape for Rectangle:
+    can area() -> float:
+        give back self.width * self.height
+    
+    can perimeter() -> float:
+        give back 2.0 * (self.width + self.height)
+    
+    can describe() -> str:
+        give back "Rectangle: " + type(self.width) + " x " + type(self.height)
+
+# Implement Drawable for Circle
+impl Drawable for Circle:
+    can draw() -> nothing:
+        display "Drawing a " + self.color + " circle"
+    
+    can get_color() -> str:
+        give back self.color
+
+# Implement Drawable for Rectangle  
+impl Drawable for Rectangle:
+    can draw() -> nothing:
+        display "Drawing a " + self.color + " rectangle"
+    
+    can get_color() -> str:
+        give back self.color
+
+fn test_shapes():
+    display "=== Testing Trait Implementations ==="
+    
+    circle be Circle(5.0, "red")
+    rect be Rectangle(10.0, 20.0, "blue")
+    
+    display "Circle info: " + circle.describe()
+    display "Circle area: " + type(circle.area())
+    display "Circle perimeter: " + type(circle.perimeter())
+    display ""
+    
+    display "Rectangle info: " + rect.describe()
+    display "Rectangle area: " + type(rect.area())
+    display "Rectangle perimeter: " + type(rect.perimeter())
+
+fn test_drawable():
+    display "=== Testing Drawable Trait ==="
+    
+    circle be Circle(5.0, "green")
+    rect be Rectangle(15.0, 25.0, "yellow")
+    
+    circle.draw()
+    display "Circle color: " + circle.get_color()
+    display ""
+    
+    rect.draw()
+    display "Rectangle color: " + rect.get_color()
+
+# Run tests
+test_shapes()
+display ""
+test_drawable()

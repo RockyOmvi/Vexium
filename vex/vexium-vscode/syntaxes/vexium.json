@@ -1,0 +1,112 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Vexium",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#identifiers"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.vexium",
+          "begin": "#",
+          "end": "$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.vexium",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.placeholder.vexium",
+              "match": "\\{[^}]+\\}"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.vexium",
+          "begin": "'",
+          "end": "'"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.vexium",
+          "match": "\\b\\d+(\\.\\d+)?([eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.hex.vexium",
+          "match": "\\b0[xX][0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.vexium",
+          "match": "\\b0[bB][01]+\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.vexium",
+          "match": "\\b(fn|if|elif|else|while|for|each|in|to|by|repeat|times|match|when|attempt|otherwise|give back|break|skip|pass|defer|return|defer|spawn|task|channel|send|receive|await|yield)\\b"
+        },
+        {
+          "name": "keyword.declaration.vexium",
+          "match": "\\b(let|const|struct|trait|impl|has|can|use|from)\\b"
+        },
+        {
+          "name": "keyword.operator.vexium",
+          "match": "\\b(is|is not|is greater than|is less than|is at least|is at most|and|or|not)\\b"
+        },
+        {
+          "name": "keyword.other.vexium",
+          "match": "\\b(true|false|nothing)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.vexium",
+          "match": "([+\\-*/%=!<>]|\\*\\*|//|%%|be|<-|->|=>)"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.other.vexium",
+          "match": "\\b[a-z_][a-zA-Z0-9_]*\\b"
+        },
+        {
+          "name": "entity.name.function.vexium",
+          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.vexium"
+}

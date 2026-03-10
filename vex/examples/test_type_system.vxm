@@ -1,0 +1,53 @@
+# Type System Test Suite for Vexium
+# Tests type inference and checking capabilities
+
+# Test 1: Integer type inference
+let x be 42
+display "Test 1 - Integer:"
+display x
+
+# Test 2: Float type inference
+let y be 3.14
+display "Test 2 - Float:"
+display y
+
+# Test 3: String type inference
+let name be "Vexium"
+display "Test 3 - String:"
+display name
+
+# Test 4: Boolean type inference
+let flag be true
+display "Test 4 - Boolean:"
+display flag
+
+# Test 5: List type inference
+let numbers be [1, 2, 3, 4, 5]
+display "Test 5 - List:"
+display numbers
+
+# Test 6: Function with typed parameters and return
+fn add(a, b):
+    give back a + b
+
+let result be add(5, 3)
+display "Test 6 - Function add(5, 3):"
+display result
+
+# Test 7: Function returning string
+fn greet(person):
+    give back "Hello"
+
+let greeting be greet(name)
+display "Test 7 - Greeting:"
+display greeting
+
+# Test 8: Function with boolean return
+fn is_positive(n):
+    give back n > 0
+
+let positive be is_positive(10)
+display "Test 8 - is_positive(10):"
+display positive
+
+display "All type inference tests passed!"

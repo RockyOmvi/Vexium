@@ -1,0 +1,50 @@
+{
+  "name": "vexium-language",
+  "displayName": "Vexium Language",
+  "description": "Language support for Vexium programming language",
+  "version": "1.0.0",
+  "publisher": "vexium",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "vexium",
+        "aliases": [
+          "Vexium",
+          "vexium"
+        ],
+        "extensions": [
+          ".vxm",
+          ".vxmc"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "vexium",
+        "scopeName": "source.vexium",
+        "path": "./syntaxes/vexium.json"
+      }
+    ],
+    "configuration": {
+      "associations": {
+        "*.vxm": "vexium",
+        "*.vxmc": "vexium"
+      }
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vexium/vexium-vscode"
+  },
+  "keywords": [
+    "vexium",
+    "language"
+  ]
+}

@@ -1,5 +1,5 @@
 #include "interpreter.h"
-#include "stdlib.h"
+#include "vex_module.h"
 
 /* ══════════════════════════════════════════════════════════════
  *  VALUE CONSTRUCTORS
@@ -86,7 +86,8 @@ void vex_print_value(VexValue val) {
             printf("%s", val.as.bool_val ? "true" : "false");
             break;
         case VAL_NOTHING:
-            printf("nothing");
+            /* Don't print 'nothing' for implicit returns - Python style */
+            return;
             break;
         case VAL_ARRAY:
             printf("[");
@@ -141,7 +142,7 @@ char* vex_value_to_string(VexValue val) {
             return vex_strdup(val.as.bool_val ? "true" : "false",
                 val.as.bool_val ? 4 : 5);
         case VAL_NOTHING:
-            return vex_strdup("nothing", 7);
+            return vex_strdup("", 1);
         default:
             snprintf(buf, sizeof(buf), "<%s>", vex_type_name(val));
             break;
@@ -309,6 +310,28 @@ static VexValue builtin_str_cast(VexValue* args, int argc) {
     return result;
 }
 
+/* Global interpreter instance for throw to access */
+static Interpreter* g_interpreter = NULL;
+
+/* throw(message) - Raise an exception */
+static VexValue builtin_throw(VexValue* args, int argc) {
+    if (argc != 1) { 
+        fprintf(stderr, "Error: throw() expects 1 argument\n"); 
+        return vex_nothing(); 
+    }
+    /* Print error message */
+    char* msg = vex_value_to_string(args[0]);
+    fprintf(stderr, "Error [throw]: %s\n", msg);
+    free(msg);
+    /* Mark that an error occurred */
+    if (g_interpreter) {
+        g_interpreter->had_error = true;
+        g_interpreter->signal.type = SIGNAL_THROW;
+        g_interpreter->signal.error_value = args[0];
+    }
+    return vex_nothing();
+}
+
 static VexValue builtin_push(VexValue* args, int argc) {
     if (argc != 2 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: push() expects (array, value)\n");
@@ -471,7 +494,7 @@ static bool is_numeric(VexValue v) {
 static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env) {
     VexValue left = eval(interp, node->as.binary.left, env);
     VexValue right = eval(interp, node->as.binary.right, env);
-    TokenType op = node->as.binary.op;
+    VexiumTokenType op = node->as.binary.op;
 
     /* String concatenation */
     if (op == TOKEN_PLUS && left.type == VAL_STRING && right.type == VAL_STRING) {
@@ -583,6 +606,44 @@ static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env
     if (op == TOKEN_AND) return vex_bool(vex_is_truthy(left) && vex_is_truthy(right));
     if (op == TOKEN_OR)  return vex_bool(vex_is_truthy(left) || vex_is_truthy(right));
 
+    /* ── Operator overloading for instances ── */
+    if (left.type == VAL_INSTANCE) {
+        ASTNode* struct_decl = left.as.instance_val->decl;
+        const char* op_method = NULL;
+        
+        /* Map token to operator method name */
+        switch (op) {
+            case TOKEN_PLUS: op_method = "operator +"; break;
+            case TOKEN_MINUS: op_method = "operator -"; break;
+            case TOKEN_STAR: op_method = "operator *"; break;
+            case TOKEN_SLASH: op_method = "operator /"; break;
+            case TOKEN_PERCENT: op_method = "operator %"; break;
+            case TOKEN_POWER: op_method = "operator **"; break;
+            case TOKEN_LT: op_method = "operator <"; break;
+            case TOKEN_GT: op_method = "operator >"; break;
+            case TOKEN_LTE: op_method = "operator <="; break;
+            case TOKEN_GTE: op_method = "operator >="; break;
+            case TOKEN_EQ: op_method = "operator =="; break;
+            case TOKEN_NEQ: op_method = "operator !="; break;
+            default: break;
+        }
+        
+        if (op_method) {
+            /* Look for operator method in struct */
+            for (int i = 0; i < struct_decl->as.struct_decl.method_count; i++) {
+                if (strcmp(struct_decl->as.struct_decl.methods[i].name, op_method) == 0) {
+                    VexValue rhs = right;
+                    VexValue* args = (VexValue*)malloc(sizeof(VexValue));
+                    args[0] = rhs;
+                    VexValue result = eval_method_call(interp, left.as.instance_val,
+                        op_method, args, 1, env);
+                    free(args);
+                    return result;
+                }
+            }
+        }
+    }
+
     fprintf(stderr, "Error [line %d]: Unsupported binary operation\n", node->line);
     return vex_nothing();
 }
@@ -649,10 +710,14 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
         /* Execute body */
         result = eval(interp, fn->as.fn_decl.body, fn_env);
 
-        /* Check for return signal */
         if (interp->signal.type == SIGNAL_RETURN) {
             result = interp->signal.return_value;
             interp->signal.type = SIGNAL_NONE;
+        }
+        /* Handle throw signal - propagate error */
+        if (interp->signal.type == SIGNAL_THROW) {
+            interp->signal.type = SIGNAL_NONE;
+            return result;
         }
 
         env_release(fn_env);
@@ -665,34 +730,75 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
         inst->closure = callee.as.fn_val.closure;
         if (inst->closure) env_retain(inst->closure);
 
-        /* Initialize fields from struct definition */
+        /* Initialize fields from struct definition and parent structs */
         ASTNode* sd = callee.as.struct_def.decl;
         inst->fields.entries = NULL;
         inst->fields.count = 0;
         inst->fields.capacity = 0;
 
-        for (int i = 0; i < sd->as.struct_decl.field_count; i++) {
-            /* Grow map */
-            if (inst->fields.count >= inst->fields.capacity) {
-                inst->fields.capacity = inst->fields.capacity == 0 ? 4 : inst->fields.capacity * 2;
-                inst->fields.entries = (ValueMapEntry*)realloc(inst->fields.entries,
-                    sizeof(ValueMapEntry) * inst->fields.capacity);
+        /* Add fields: collect from all parents first, then this struct */
+        /* We need to iterate through parent chain to get all fields */
+        int field_arg_idx = 0;
+        ASTNode* collect_sd = sd;
+        
+        /* Collect all fields from this struct and parents */
+        while (collect_sd) {
+            int next_parent_idx = -1;
+            
+            /* Process all parents of current struct */
+            for (int p = 0; p < collect_sd->as.struct_decl.parent_count; p++) {
+                VexValue* parent_def = env_get(env, collect_sd->as.struct_decl.parent_names[p]);
+                if (parent_def && parent_def->type == VAL_STRUCT_DEF && next_parent_idx == -1) {
+                    next_parent_idx = p;
+                    break;
+                }
             }
-            ValueMapEntry* e = &inst->fields.entries[inst->fields.count++];
-            e->key = vex_strdup(sd->as.struct_decl.fields[i].name,
-                (int)strlen(sd->as.struct_decl.fields[i].name));
-            /* Use constructor arg if available, otherwise nothing */
-            e->value = (i < argc) ? args[i] : vex_nothing();
+            
+            /* Add current struct's fields */
+            for (int i = 0; i < collect_sd->as.struct_decl.field_count; i++) {
+                if (inst->fields.count >= inst->fields.capacity) {
+                    inst->fields.capacity = inst->fields.capacity == 0 ? 4 : inst->fields.capacity * 2;
+                    inst->fields.entries = (ValueMapEntry*)realloc(inst->fields.entries,
+                        sizeof(ValueMapEntry) * inst->fields.capacity);
+                }
+                ValueMapEntry* e = &inst->fields.entries[inst->fields.count++];
+                e->key = vex_strdup(collect_sd->as.struct_decl.fields[i].name,
+                    (int)strlen(collect_sd->as.struct_decl.fields[i].name));
+                e->value = (field_arg_idx < argc) ? args[field_arg_idx++] : vex_nothing();
+            }
+            
+            /* Move to first parent if exists */
+            if (next_parent_idx >= 0) {
+                VexValue* parent_def = env_get(env, collect_sd->as.struct_decl.parent_names[next_parent_idx]);
+                if (parent_def && parent_def->type == VAL_STRUCT_DEF) {
+                    collect_sd = parent_def->as.struct_def.decl;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
         }
 
         result.type = VAL_INSTANCE;
         result.as.instance_val = inst;
 
-        /* Auto-call init() constructor if it exists */
+        /* Auto-call create() method if it exists (primary constructor) */
+        bool found_create = false;
         for (int i = 0; i < sd->as.struct_decl.method_count; i++) {
-            if (strcmp(sd->as.struct_decl.methods[i].name, "init") == 0) {
-                eval_method_call(interp, inst, "init", args, argc, env);
+            if (strcmp(sd->as.struct_decl.methods[i].name, "create") == 0) {
+                eval_method_call(interp, inst, "create", args, argc, env);
+                found_create = true;
                 break;
+            }
+        }
+        /* If create doesn't exist, look for init() */
+        if (!found_create) {
+            for (int i = 0; i < sd->as.struct_decl.method_count; i++) {
+                if (strcmp(sd->as.struct_decl.methods[i].name, "init") == 0) {
+                    eval_method_call(interp, inst, "init", args, argc, env);
+                    break;
+                }
             }
         }
     }
@@ -747,15 +853,17 @@ static VexValue eval_method_call(Interpreter* interp, InstanceValue* inst,
                 return result;
             }
         }
-        /* Walk up to parent struct */
-        if (sd->as.struct_decl.parent_name) {
-            VexValue* parent_def = env_get(env, sd->as.struct_decl.parent_name);
+        /* Walk up to parent struct (or check all parents for multiple inheritance) */
+        bool found_parent = false;
+        if (sd->as.struct_decl.parent_count > 0) {
+            /* Check first parent (for chain-based inheritance) */
+            VexValue* parent_def = env_get(env, sd->as.struct_decl.parent_names[0]);
             if (parent_def && parent_def->type == VAL_STRUCT_DEF) {
                 sd = parent_def->as.struct_def.decl;
-            } else {
-                break;
+                found_parent = true;
             }
-        } else {
+        }
+        if (!found_parent) {
             break;
         }
     }
@@ -923,11 +1031,19 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
         /* ── Assignment ── */
         case NODE_ASSIGN: {
             VexValue value = eval(interp, node->as.assign.value, env);
-            TokenType op = node->as.assign.op;
+            VexiumTokenType op = node->as.assign.op;
 
             if (node->as.assign.target->type == NODE_IDENTIFIER) {
                 const char* name = node->as.assign.target->as.identifier.name;
-                if (op == TOKEN_BE || op == TOKEN_ASSIGN) {
+                if (op == TOKEN_BE) {
+                    /* TOKEN_BE: Create variable if doesn't exist, else update */
+                    VexValue* existing = env_get(env, name);
+                    if (existing) {
+                        env_set(env, name, value);
+                    } else {
+                        env_define(env, name, value, false);
+                    }
+                } else if (op == TOKEN_ASSIGN) {
                     env_set(env, name, value);
                 } else {
                     VexValue* current = env_get(env, name);
@@ -1181,6 +1297,74 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
         case NODE_PASS:
             return vex_nothing();
 
+        /* ── Defer statement ── */
+        case NODE_DEFER: {
+            /* Evaluate deferred expression immediately (no real defer stack yet) */
+            eval(interp, node->as.defer.expr, env);
+            return vex_nothing();
+        }
+
+        /* ── Await expression ── */
+        case NODE_AWAIT: {
+            /* Evaluate the awaited expression (no real async support) */
+            return eval(interp, node->as.await.expr, env);
+        }
+
+        /* ── Trait declaration ── */
+        case NODE_TRAIT: {
+            VexValue td;
+            td.type = VAL_STRUCT_DEF;  /* Reuse struct def for trait */
+            td.as.struct_def.name = node->as.trait_decl.name;
+            td.as.struct_def.decl = node;
+            env_define(env, node->as.trait_decl.name, td, false);
+            return vex_nothing();
+        }
+
+        /* ── Impl block ── */
+        case NODE_IMPL: {
+            /* Attach impl methods to the struct */
+            VexValue* struct_val = env_get(env, node->as.impl_block.struct_name);
+            if (!struct_val || struct_val->type != VAL_STRUCT_DEF) {
+                fprintf(stderr, "Error [line %d]: Struct '%s' not found for impl\n",
+                    node->line, node->as.impl_block.struct_name);
+                return vex_nothing();
+            }
+            
+            /* Add impl methods to struct's method list */
+            ASTNode* struct_decl = struct_val->as.struct_def.decl;
+            for (int i = 0; i < node->as.impl_block.method_count; i++) {
+                /* Grow struct's method array if needed */
+                if (struct_decl->as.struct_decl.method_count >= struct_decl->as.struct_decl.method_capacity) {
+                    struct_decl->as.struct_decl.method_capacity = 
+                        struct_decl->as.struct_decl.method_capacity == 0 ? 4 : struct_decl->as.struct_decl.method_capacity * 2;
+                    struct_decl->as.struct_decl.methods = (StructMethod*)realloc(
+                        struct_decl->as.struct_decl.methods,
+                        sizeof(StructMethod) * struct_decl->as.struct_decl.method_capacity);
+                }
+                
+                /* Copy method */
+                StructMethod* dest = &struct_decl->as.struct_decl.methods[struct_decl->as.struct_decl.method_count++];
+                StructMethod* src = &node->as.impl_block.methods[i];
+                dest->name = src->name;
+                dest->params = src->params;
+                dest->return_type = src->return_type;
+                dest->body = src->body;
+            }
+            return vex_nothing();
+        }
+
+        /* ── Operator overload ── */
+        case NODE_OPERATOR_OVERLOAD: {
+            /* Store operator overload in struct for later use */
+            VexValue* struct_val = env_get(env, node->as.operator_overload.struct_name);
+            if (!struct_val || struct_val->type != VAL_STRUCT_DEF) {
+                fprintf(stderr, "Error [line %d]: Struct '%s' not found for operator\n",
+                    node->line, node->as.operator_overload.struct_name);
+            }
+            /* Operator would be attached to struct during binary op resolution */
+            return vex_nothing();
+        }
+
         /* ── Struct declaration ── */
         case NODE_STRUCT_DECL: {
             VexValue sd;
@@ -1189,16 +1373,15 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             sd.as.struct_def.decl = node;
             env_define(env, node->as.struct_decl.name, sd, false);
 
-            /* If extends parent, copy parent fields into this struct's decl */
-            if (node->as.struct_decl.parent_name) {
-                VexValue* parent = env_get(env, node->as.struct_decl.parent_name);
-                if (parent && parent->type == VAL_STRUCT_DEF) {
-                    /* Parent fields are inherited — they'll be resolved at instance creation */
-                    /* Methods are resolved via chain in eval_method_call */
-                } else {
+            /* If extends parent(s), verify they exist */
+            for (int p = 0; p < node->as.struct_decl.parent_count; p++) {
+                VexValue* parent = env_get(env, node->as.struct_decl.parent_names[p]);
+                if (!parent || parent->type != VAL_STRUCT_DEF) {
                     fprintf(stderr, "Error [line %d]: Parent struct '%s' not found\n",
-                        node->line, node->as.struct_decl.parent_name);
+                        node->line, node->as.struct_decl.parent_names[p]);
                 }
+                /* Parent fields are inherited — they'll be resolved at instance creation */
+                /* Methods are resolved via chain in eval_method_call */
             }
             return vex_nothing();
         }
@@ -1354,6 +1537,7 @@ void interpreter_init(Interpreter* interp) {
     interp->global_env = env_new(NULL);
     interp->signal.type = SIGNAL_NONE;
     interp->had_error = false;
+    g_interpreter = interp;
 
     /* Register built-in functions */
     VexValue v;
@@ -1375,6 +1559,9 @@ void interpreter_init(Interpreter* interp) {
 
     v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_str_cast; v.as.builtin_fn.name = "str";
     env_define(interp->global_env, "str", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_throw; v.as.builtin_fn.name = "throw";
+    env_define(interp->global_env, "throw", v, true);
 
     v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_push; v.as.builtin_fn.name = "push";
     env_define(interp->global_env, "push", v, true);

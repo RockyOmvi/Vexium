@@ -1,0 +1,7 @@
+# Simple function test
+
+fn add(a, b):
+    give back a + b
+
+result be add(5, 10)
+display result

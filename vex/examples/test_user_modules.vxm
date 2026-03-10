@@ -1,0 +1,14 @@
+# Test user-defined module imports
+from math_lib use square
+from math_lib use cube
+
+display "=== User Module Import Test ==="
+display ""
+
+# Test imported functions directly
+display "Testing imported functions:"
+display "square(5) = " + str(square(5))
+display "cube(3) = " + str(cube(3))
+display ""
+
+display "Module import test completed!"

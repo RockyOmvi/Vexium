@@ -1,0 +1,44 @@
+# Test: Defer Statements
+# Defer schedules code to run before a function returns
+# Useful for cleanup, resource release, logging, etc.
+
+fn cleanup_example(filename):
+    display "Opening file: " + filename
+    defer:
+        display "Closing file: " + filename
+    defer:
+        display "Cleanup: Releasing resources"
+    display "Processing file..."
+    give back true
+
+fn resource_management():
+    display "=== Testing Defer Statements ==="
+    result be cleanup_example("data.txt")
+    display "File operation result: " + type(result)
+
+fn deferred_cleanup_chain():
+    display "=== Defer Cleanup Chain ==="
+    display "Start"
+    defer:
+        display "Cleanup 3"
+    defer:
+        display "Cleanup 2"
+    defer:
+        display "Cleanup 1"
+    display "End"
+    # Output order: Start, End, Cleanup 1, Cleanup 2, Cleanup 3
+
+fn exception_context():
+    display "=== Defer with Exception Context ==="
+    display "Begin operation"
+    defer:
+        display "Operation cleanup (always runs)"
+    display "Processing..."
+    give back nothing
+
+# Run all tests
+resource_management()
+display ""
+deferred_cleanup_chain()
+display ""
+exception_context()

@@ -1,0 +1,511 @@
+# ═══════════════════════════════════════════════════════════════════
+# Redis Client Library for Vexium
+# Build Your Own Redis
+# ═══════════════════════════════════════════════════════════════════
+
+# Redis Protocol (RESP) Parser
+can redis_encode_command(args):
+    # RESP Array: *{num args}\r\n
+    let result be "*" + str(len(args)) + "\r\n"
+    
+    for each arg in args:
+        let arg_str be ""
+        if is_number(arg):
+            set arg_str be str(arg)
+        elif is_string(arg):
+            set arg_str be arg
+        elif is_array(arg):
+            set arg_str be json.stringify(arg)
+        else:
+            set arg_str be str(arg)
+        
+        set result be result + "$" + str(len(arg_str)) + "\r\n" + arg_str + "\r\n"
+    
+    give back result
+
+can redis_parse_response(response):
+    # Parse RESP (Redis Serialization Protocol)
+    if len(response) == 0:
+        give back nothing
+    
+    let first_char be response[0]
+    
+    if first_char == "+":
+        # Simple string: +OK\r\n
+        give back response[1:len(response)-2]
+    
+    elif first_char == "-":
+        # Error: -ERR message\r\n
+        give back {"error": response[1:len(response)-2]}
+    
+    elif first_char == ":":
+        # Integer: :1000\r\n
+        give back to_number(response[1:len(response)-2])
+    
+    elif first_char == "$":
+        # Bulk string: $5\r\nhello\r\n
+        let lines be response.split("\r\n")
+        if len(lines) < 2:
+            give back nothing
+        
+        let length be to_number(lines[0][1:])
+        if length == -1:
+            give back nothing
+        
+        if len(lines) > 1:
+            give back lines[1]
+        give back nothing
+    
+    elif first_char == "*":
+        # Array: *2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n
+        let lines be response.split("\r\n")
+        if len(lines) < 2:
+            give back []
+        
+        let count be to_number(lines[0][1:])
+        if count == -1:
+            give back []
+        
+        let result be []
+        let i be 1
+        let current be nothing
+        
+        for each line in lines[1:]:
+            if len(line) == 0:
+                continue
+            
+            if line[0] == "$":
+                let length be to_number(line[1:])
+                if length == -1:
+                    append nothing to result
+                current be nothing
+            elif line[0] == ":":
+                append to_number(line[1:]) to result
+            elif line[0] == "+":
+                append line[1:] to result
+            elif len(line) > 0 and is_number(line[0]):
+                # This is a bulk string value
+                append line to result
+        
+        give back result
+    
+    else:
+        give back response
+
+
+# In-Memory Redis Implementation
+struct RedisServer:
+    has data
+    has expiries
+    has lists
+    has sets
+    has hashes
+    
+    can create:
+        set self.data be {}        # Key-value store
+        set self.expiries be {}    # Key -> expiry timestamp
+        set self.lists be {}       # Key -> list
+        set self.sets be {}        # Key -> set
+        set self.hashes be {}      # Key -> hash
+    
+    # String operations
+    can set(key, value):
+        set self.data[key] be value
+        # Clear any expiry
+        if key in self.expiries:
+            remove key from self.expiries
+    
+    can setex(key, seconds, value):
+        self.set(key, value)
+        set self.expiries[key] be time.time() + seconds
+    
+    can get(key):
+        # Check expiry
+        if key in self.expiries:
+            if time.time() > self.expiries[key]:
+                remove key from self.data
+                remove key from self.expiries
+                give back nothing
+        
+        if key in self.data:
+            give back self.data[key]
+        give back nothing
+    
+    can del(keys):
+        let count be 0
+        for each key in keys:
+            if key in self.data:
+                set count be count + 1
+                remove key from self.data
+            if key in self.expiries:
+                remove key from self.expiries
+            if key in self.lists:
+                remove key from self.lists
+            if key in self.sets:
+                remove key from self.sets
+            if key in self.hashes:
+                remove key from self.hashes
+        give back count
+    
+    can exists(keys):
+        let count be 0
+        for each key in keys:
+            if key in self.data:
+                set count be count + 1
+        give back count
+    
+    can expire(key, seconds):
+        if key in self.data:
+            set self.expiries[key] be time.time() + seconds
+            give back 1
+        give back 0
+    
+    can ttl(key):
+        if key in self.expiries:
+            let remaining be self.expiries[key] - time.time()
+            if remaining > 0:
+                give back to_number(remaining)
+            give back -2
+        if key in self.data:
+            give back -1
+        give back -2
+    
+    # List operations
+    can lpush(key, values):
+        if key not in self.lists:
+            set self.lists[key] be []
+        
+        for each value in values:
+            insert value at 0 of self.lists[key]
+        
+        give back len(self.lists[key])
+    
+    can rpush(key, values):
+        if key not in self.lists:
+            set self.lists[key] be []
+        
+        for each value in values:
+            append value to self.lists[key]
+        
+        give back len(self.lists[key])
+    
+    can lpop(key):
+        if key not in self.lists or len(self.lists[key]) == 0:
+            give back nothing
+        
+        let value be self.lists[key][0]
+        remove at 0 from self.lists[key]
+        give back value
+    
+    can rpop(key):
+        if key not in self.lists or len(self.lists[key]) == 0:
+            give back nothing
+        
+        let value be self.lists[key][len(self.lists[key]) - 1]
+        remove last from self.lists[key]
+        give back value
+    
+    can lrange(key, start, stop):
+        if key not in self.lists:
+            give back []
+        
+        let lst be self.lists[key]
+        let result be []
+        
+        # Handle negative indices
+        if stop < 0:
+            set stop be len(lst) + stop + 1
+        
+        for i in start to stop:
+            if i >= 0 and i < len(lst):
+                append lst[i] to result
+        
+        give back result
+    
+    can llen(key):
+        if key not in self.lists:
+            give back 0
+        give back len(self.lists[key])
+    
+    # Set operations
+    can sadd(key, members):
+        if key not in self.sets:
+            set self.sets[key] be []
+        
+        let added be 0
+        for each member in members:
+            let found be false
+            for each existing in self.sets[key]:
+                if existing == member:
+                    set found be true
+                    break
+            if not found:
+                append member to self.sets[key]
+                set added be added + 1
+        
+        give back added
+    
+    can smembers(key):
+        if key not in self.sets:
+            give back []
+        give back self.sets[key]
+    
+    can sismember(key, member):
+        if key not in self.sets:
+            give back 0
+        
+        for each existing in self.sets[key]:
+            if existing == member:
+                give back 1
+        give back 0
+    
+    can scard(key):
+        if key not in self.sets:
+            give back 0
+        give back len(self.sets[key])
+    
+    # Hash operations
+    can hset(key, field, value):
+        if key not in self.hashes:
+            set self.hashes[key] be {}
+        
+        set self.hashes[key][field] be value
+        give back 1
+    
+    can hget(key, field):
+        if key not in self.hashes:
+            give back nothing
+        
+        if field in self.hashes[key]:
+            give back self.hashes[key][field]
+        give back nothing
+    
+    can hgetall(key):
+        if key not in self.hashes:
+            give back {}
+        give back self.hashes[key]
+    
+    can hdel(key, fields):
+        if key not in self.hashes:
+            give back 0
+        
+        let deleted be 0
+        for each field in fields:
+            if field in self.hashes[key]:
+                remove field from self.hashes[key]
+                set deleted be deleted + 1
+        
+        give back deleted
+    
+    # Keys and scanning
+    can keys(pattern):
+        let result be []
+        let regex_pattern be pattern
+            .replace("*", ".*")
+            .replace("?", ".")
+        
+        for each key in self.data:
+            if string.matches(key, regex_pattern):
+                append key to result
+        
+        give back result
+    
+    can flushall:
+        set self.data be {}
+        set self.expiries be {}
+        set self.lists be {}
+        set self.sets be {}
+        set self.hashes be {}
+        give back "OK"
+
+
+# Redis Client (for connecting to external Redis)
+struct RedisClient:
+    has host
+    has port
+    has socket
+    
+    can create(host, port):
+        set self.host be host
+        set self.port be port
+        set self.socket be nothing
+    
+    can connect:
+        # Would use network socket in real implementation
+        display "Connecting to Redis at " + self.host + ":" + str(self.port)
+        set self.socket be {"connected": true}
+        give back self
+    
+    can execute(command):
+        # Would send command over network in real implementation
+        let encoded be redis_encode_command(command)
+        # display "Sending: " + encoded
+        give back {"response": "OK"}
+    
+    # String commands
+    can set(key, value):
+        give back self.execute(["SET", key, value])
+    
+    can get(key):
+        give back self.execute(["GET", key])
+    
+    can setex(key, seconds, value):
+        give back self.execute(["SETEX", key, seconds, value])
+    
+    # List commands
+    can lpush(key, value):
+        give back self.execute(["LPUSH", key, value])
+    
+    can rpush(key, value):
+        give back self.execute(["RPUSH", key, value])
+    
+    # Hash commands
+    can hset(key, field, value):
+        give back self.execute(["HSET", key, field, value])
+    
+    can hget(key, field):
+        give back self.execute(["HGET", key, field])
+    
+    # Close connection
+    can close:
+        display "Closing Redis connection"
+        set self.socket be nothing
+
+
+# Redis Sentinel for high availability
+struct RedisSentinel:
+    has master_name
+    has sentinels
+    has current_master
+    
+    can create(master_name):
+        set self.master_name be master_name
+        set self.sentinels be []
+        set self.current_master be nothing
+    
+    can add_sentinel(host, port):
+        append {"host": host, "port": port} to self.sentinels
+    
+    can get_master:
+        # Query sentinel for master address
+        # Simplified implementation
+        if len(self.sentinels) > 0:
+            set self.current_master be self.sentinels[0]
+        give back self.current_master
+
+
+# Redis Cluster client
+struct RedisCluster:
+    has nodes
+    has slots
+    
+    can create:
+        set self.nodes be []
+        set self.slots be {}
+    
+    can add_node(host, port):
+        append {"host": host, "port": port, "slots": []} to self.nodes
+    
+    can get_node(key):
+        # Hash slot calculation
+        let slot be 0
+        for each c in key:
+            set slot be (slot * 33 + to_number(c)) % 16384
+        
+        for each node in self.nodes:
+            if slot in node.slots:
+                give back node
+        
+        give back self.nodes[0]
+
+
+# Pub/Sub support
+struct RedisPubSub:
+    has channels
+    has subscribers
+    has messages
+    
+    can create:
+        set self.channels be {}
+        set self.subscribers be {}
+        set self.messages be []
+    
+    can subscribe(channel, callback):
+        if channel not in self.channels:
+            set self.channels[channel] be []
+        append callback to self.channels[channel]
+    
+    can publish(channel, message):
+        if channel in self.channels:
+            for each callback in self.channels[channel]:
+                callback(message)
+        append {"channel": channel, "message": message} to self.messages
+        give back 1
+    
+    can psubscribe(pattern, callback):
+        # Pattern subscription
+        give back 1
+
+
+# Transaction support
+struct RedisTransaction:
+    has commands
+    has client
+    
+    can create(client):
+        set self.commands be []
+        set self.client be client
+    
+    can multi:
+        # Start transaction
+        give back self
+    
+    can exec:
+        # Execute all commands
+        let results be []
+        for each cmd in self.commands:
+            let result be self.client.execute(cmd)
+            append result to results
+        give back results
+    
+    can get(key):
+        append ["GET", key] to self.commands
+        give back self
+    
+    can set(key, value):
+        append ["SET", key, value] to self.commands
+        give back self
+
+
+# Pipeline for batching commands
+struct RedisPipeline:
+    has commands
+    has client
+    
+    can create(client):
+        set self.commands be []
+        set self.client be client
+    
+    can set(key, value):
+        append ["SET", key, value] to self.commands
+        give back self
+    
+    can get(key):
+        append ["GET", key] to self.commands
+        give back self
+    
+    can execute:
+        let results be []
+        for each cmd in self.commands:
+            let result be self.client.execute(cmd)
+            append result to results
+        set self.commands be []
+        give back results
+
+
+# Export
+export {
+    redis_encode_command, redis_parse_response,
+    RedisServer, RedisClient, RedisSentinel, RedisCluster,
+    RedisPubSub, RedisTransaction, RedisPipeline
+}

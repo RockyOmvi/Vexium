@@ -63,11 +63,21 @@ typedef enum {
 
     /* ── Arrays ── */
     OP_ARRAY,           /* Build array: OP_ARRAY [count_lo] [count_hi] */
+    OP_ARRAY_PUSH,      /* Append TOS to array at TOS-1 */
     OP_INDEX_GET,       /* array[index] */
     OP_INDEX_SET,       /* array[index] = val */
 
     /* ── Maps ── */
     OP_MAP,             /* Build map: OP_MAP [count_lo] [count_hi] */
+
+    /* ── Concurrency & Control ── */
+    OP_DEFER,           /* Schedule deferred execution: OP_DEFER [frame_offset] */
+    OP_AWAIT,           /* Wait for async result (currently blocking stub) */
+    OP_TAIL_CALL,       /* Tail call optimization: OP_TAIL_CALL [argc] */
+    OP_SPAWN,           /* Spawn a new task: OP_SPAWN */
+    OP_CHANNEL_CREATE,  /* Create a communication channel: OP_CHANNEL_CREATE */
+    OP_CHANNEL_SEND,    /* Send value on channel: OP_CHANNEL_SEND */
+    OP_CHANNEL_RECV,    /* Receive value from channel: OP_CHANNEL_RECV */
 
     /* ── Halt ── */
     OP_HALT             /* Stop execution */
@@ -178,12 +188,20 @@ typedef enum {
     OBJ_STRING,
     OBJ_FUNCTION,
     OBJ_ARRAY,
-    OBJ_MAP
+    OBJ_MAP,
+    OBJ_CLOSURE,
+    OBJ_UPVALUE,
+    OBJ_STRUCT_DEF,
+    OBJ_INSTANCE,
+    OBJ_ERROR,
+    OBJ_TENSOR,
+    OBJ_CHANNEL
 } ObjType;
 
 /* Common object header */
 typedef struct Obj {
     ObjType type;
+    bool is_marked;
     struct Obj* next;  /* GC intrusive linked list */
 } Obj;
 
@@ -232,6 +250,47 @@ typedef struct {
     VMMapEntry* entries;
 } ObjMap;
 
+/* Upvalue object */
+typedef struct ObjUpvalue {
+    Obj obj;
+    Value* location;
+    Value closed;
+    struct ObjUpvalue* next;
+} ObjUpvalue;
+
+/* Closure object */
+typedef struct ObjClosure {
+    Obj obj;
+    ObjFunction* function;
+    ObjUpvalue** upvalues;
+    int upvalue_count;
+} ObjClosure;
+
+/* Struct Definition object */
+typedef struct {
+    Obj obj;
+    ObjString* name;
+    int field_count;
+    ObjString** field_names;
+    ObjMap* methods;
+} ObjStructDef;
+
+/* Instance object */
+typedef struct {
+    Obj obj;
+    ObjStructDef* struct_def;
+    ObjMap* fields;
+} ObjInstance;
+
+/* Error object */
+typedef struct {
+    Obj obj;
+    ObjString* message;
+    ObjString* error_type;
+    ObjString* file;
+    int line;
+} ObjError;
+
 /* ══════════════════════════════════════════════════════════════
  *  CHUNK (bytecode container)
  * ══════════════════════════════════════════════════════════════ */
@@ -257,6 +316,7 @@ ObjString* obj_string_new(const char* chars, int length);
 ObjFunction* obj_function_new(const char* name);
 ObjArray* obj_array_new(int capacity);
 ObjMap* obj_map_new(void);
+void obj_map_set(ObjMap* map, ObjString* key, Value value);
 uint32_t hash_string(const char* key, int length);
 
 /* Value printing */

@@ -1,0 +1,12 @@
+# Test yield/generator functionality
+
+fn counter(max):
+    let i be 0
+    while i is less than max:
+        yield i
+        i = i + 1
+
+# Test yield - note: generators need full implementation
+# This is infrastructure only
+display "Testing yield parsing..."
+display "Infrastructure ready for yield"

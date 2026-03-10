@@ -1,0 +1,11 @@
+# Debug module import
+display "Step 1: Before import"
+
+from math_lib use square
+
+display "Step 2: After import"
+display "square function defined"
+
+let result be square(5)
+display "Result:"
+display result

@@ -1,0 +1,9 @@
+# Test *args only
+
+fn test_args(*numbers):
+    display "Args received:"
+    display numbers
+    give back 0
+
+test_args(1, 2, 3, 4)
+display "Done!"

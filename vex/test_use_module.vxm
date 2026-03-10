@@ -1,0 +1,5 @@
+# Test module import and function call
+from math_lib use square
+display "Function imported"
+display "5 squared is..."
+display square(5)

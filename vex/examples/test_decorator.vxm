@@ -1,0 +1,13 @@
+# Test decorator - correct Vexium syntax
+
+fn my_decorator(f):
+    give back f
+
+@my_decorator
+fn greet():
+    display "Hello from decorated!"
+    give back 100
+
+result be greet()
+display result
+display "Decorators work!"

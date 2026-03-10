@@ -127,6 +127,12 @@ static int resolve_local(Compiler* compiler, const char* name) {
 
 static void compile_node(ASTNode* node);
 static void compile_expression(ASTNode* node);
+static void compile_list_comp(ASTNode* node);
+static void compile_match(ASTNode* node);
+static void compile_lambda(ASTNode* node);
+static void compile_defer(ASTNode* node);
+static void compile_await(ASTNode* node);
+static void compile_spawn(ASTNode* node);
 
 /* ══════════════════════════════════════════════════════════════
  *  COMPILE EXPRESSIONS
@@ -215,9 +221,9 @@ static void compile_string_literal(ASTNode* node) {
         }
     }
 
-    /* Concatenate all parts: ADD them together left-to-right */
+    /* Concatenate all parts: CONCAT them together left-to-right */
     for (int p = 1; p < parts; p++) {
-        emit_byte(OP_ADD, line);
+        emit_byte(OP_CONCAT, line);
     }
 }
 
@@ -239,7 +245,7 @@ static void compile_identifier(ASTNode* node) {
 }
 
 static void compile_binary(ASTNode* node) {
-    TokenType op = node->as.binary.op;
+    VexiumTokenType op = node->as.binary.op;
 
     /* Short-circuit: and */
     if (op == TOKEN_AND) {
@@ -339,9 +345,15 @@ static void compile_index(ASTNode* node) {
     emit_byte(OP_INDEX_GET, node->line);
 }
 
+static void compile_field_access(ASTNode* node) {
+    /* obj.field — compile object, then pop (VM doesn't support field access yet) */
+    compile_expression(node->as.field_access.object);
+    emit_byte(OP_POP, node->line);  /* Placeholder - field access not in VM yet */
+}
+
 static void compile_assign(ASTNode* node) {
     ASTNode* target = node->as.assign.target;
-    TokenType op = node->as.assign.op;
+    VexiumTokenType op = node->as.assign.op;
 
     /* Handle compound assignment: +=, -=, *=, /= */
     if (op == TOKEN_PLUS_ASSIGN || op == TOKEN_MINUS_ASSIGN ||
@@ -395,7 +407,12 @@ static void compile_expression(ASTNode* node) {
         case NODE_ARRAY_LITERAL:  compile_array_literal(node); break;
         case NODE_MAP_LITERAL:    compile_map_literal(node); break;
         case NODE_INDEX:          compile_index(node); break;
+        case NODE_FIELD_ACCESS:  compile_field_access(node); break;
         case NODE_ASSIGN:         compile_assign(node); break;
+        case NODE_LAMBDA:         compile_lambda(node); break;
+        case NODE_LIST_COMP:      compile_list_comp(node); break;
+        case NODE_AWAIT:          compile_await(node); break;
+        case NODE_SPAWN:          compile_spawn(node); break;
         default:
             fprintf(stderr, "[Compiler] Expression node type %d not compiled (line %d)\n",
                     node->type, node->line);
@@ -628,6 +645,140 @@ static void compile_repeat(ASTNode* node) {
     end_scope(node->line);
 }
 
+static void compile_list_comp(ASTNode* node) {
+    begin_scope();
+    
+    emit_byte(OP_ARRAY, node->line);
+    emit_short(0, node->line);
+    add_local("__res__");
+    int res_slot = current->local_count - 1;
+    
+    compile_expression(node->as.list_comp.iterable);
+    add_local("__iter__");
+    int iter_slot = current->local_count - 1;
+
+    emit_constant(val_int(0), node->line);
+    add_local("__idx__");
+    int idx_slot = current->local_count - 1;
+
+    emit_byte(OP_NOTHING, node->line);
+    add_local(node->as.list_comp.var_name);
+    int var_slot = current->local_count - 1;
+
+    int loop_start = current->function->chunk_count;
+
+    /* Condition: idx < len(iter) */
+    emit_byte(OP_GET_LOCAL, node->line);
+    emit_byte((uint8_t)idx_slot, node->line);
+    int len_idx = add_string_constant("len", 3);
+    emit_byte(OP_GET_GLOBAL, node->line);
+    emit_short((uint16_t)len_idx, node->line);
+    emit_byte(OP_GET_LOCAL, node->line);
+    emit_byte((uint8_t)iter_slot, node->line);
+    emit_byte(OP_CALL, node->line);
+    emit_byte(1, node->line);
+    emit_byte(OP_LT, node->line);
+
+    int exit_jump = emit_jump(OP_JMP_IF_FALSE, node->line);
+    emit_byte(OP_POP, node->line);
+
+    /* Set var = iter[idx] */
+    emit_byte(OP_GET_LOCAL, node->line);
+    emit_byte((uint8_t)iter_slot, node->line);
+    emit_byte(OP_GET_LOCAL, node->line);
+    emit_byte((uint8_t)idx_slot, node->line);
+    emit_byte(OP_INDEX_GET, node->line);
+    emit_byte(OP_SET_LOCAL, node->line);
+    emit_byte((uint8_t)var_slot, node->line);
+    emit_byte(OP_POP, node->line);
+
+    if (node->as.list_comp.condition) {
+        compile_expression(node->as.list_comp.condition);
+        int skip_jump = emit_jump(OP_JMP_IF_FALSE, node->line);
+        emit_byte(OP_POP, node->line);
+        
+        emit_byte(OP_GET_LOCAL, node->line);
+        emit_byte((uint8_t)res_slot, node->line);
+        compile_expression(node->as.list_comp.expr);
+        emit_byte(OP_ARRAY_PUSH, node->line);
+        emit_byte(OP_POP, node->line); /* pop array dup */
+        
+        patch_jump(skip_jump);
+        emit_byte(OP_POP, node->line); /* pop condition */
+    } else {
+        emit_byte(OP_GET_LOCAL, node->line);
+        emit_byte((uint8_t)res_slot, node->line);
+        compile_expression(node->as.list_comp.expr);
+        emit_byte(OP_ARRAY_PUSH, node->line);
+        emit_byte(OP_POP, node->line); /* pop array dup */
+    }
+
+    /* Increment idx */
+    emit_byte(OP_GET_LOCAL, node->line);
+    emit_byte((uint8_t)idx_slot, node->line);
+    emit_constant(val_int(1), node->line);
+    emit_byte(OP_ADD, node->line);
+    emit_byte(OP_SET_LOCAL, node->line);
+    emit_byte((uint8_t)idx_slot, node->line);
+    emit_byte(OP_POP, node->line);
+
+    emit_loop(loop_start, node->line);
+    patch_jump(exit_jump);
+    emit_byte(OP_POP, node->line);
+
+    /* Manual scope end to keep __res__ on stack */
+    current->scope_depth--;
+    emit_byte(OP_POP, node->line); /* pop var */
+    emit_byte(OP_POP, node->line); /* pop __idx__ */
+    emit_byte(OP_POP, node->line); /* pop __iter__ */
+    current->local_count -= 4; /* __res__, __iter__, __idx__, var */
+    /* __res__ is left on the stack as the expression result */
+}
+
+static void compile_match(ASTNode* node) {
+    /* match is a statement */
+    compile_expression(node->as.match_stmt.expr);
+    
+    int end_jumps[128]; // Max 128 arms for simplicity
+    int arm_count = node->as.match_stmt.arms.count;
+    if (arm_count > 128) arm_count = 128;
+    
+    for (int i = 0; i < arm_count; i++) {
+        MatchArm* arm = &node->as.match_stmt.arms.items[i];
+        if (arm->pattern == NULL) {
+            /* otherwise: default case */
+            emit_byte(OP_POP, node->line); // pop match expr
+            compile_node(arm->body);
+            end_jumps[i] = emit_jump(OP_JMP, node->line);
+        } else {
+            /* Duplicate match expr to compare */
+            emit_byte(OP_DUP, node->line);
+            compile_expression(arm->pattern);
+            emit_byte(OP_EQ, node->line);
+            int false_jump = emit_jump(OP_JMP_IF_FALSE, node->line);
+            emit_byte(OP_POP, node->line); /* pop true comparison result */
+            
+            emit_byte(OP_POP, node->line); /* pop match expr to execute body cleanly */
+            compile_node(arm->body);
+            end_jumps[i] = emit_jump(OP_JMP, node->line);
+            
+            patch_jump(false_jump);
+            emit_byte(OP_POP, node->line); /* pop false comparison result */
+        }
+    }
+    
+    /* Pop match expr if no arms matched and no otherwise was hit */
+    /* Because otherwise pops and jumps, if we reach here we didn't hit otherwise */
+    /* Wait, if the last arm is not 'otherwise', we need to pop the match expr. */
+    if (arm_count == 0 || node->as.match_stmt.arms.items[arm_count - 1].pattern != NULL) {
+        emit_byte(OP_POP, node->line);
+    }
+    
+    for (int i = 0; i < arm_count; i++) {
+        patch_jump(end_jumps[i]);
+    }
+}
+
 static void compile_fn_decl(ASTNode* node) {
     const char* name = node->as.fn_decl.name;
 
@@ -676,6 +827,50 @@ static void compile_fn_decl(ASTNode* node) {
     }
 }
 
+static void compile_lambda(ASTNode* node) {
+    ObjFunction* fn = obj_function_new("<lambda>");
+    fn->arity = node->as.lambda.params.count;
+
+    Compiler fn_compiler;
+    fn_compiler.function = fn;
+    fn_compiler.enclosing = current;
+    fn_compiler.local_count = 0;
+    fn_compiler.scope_depth = 0;
+    fn_compiler.had_error = false;
+    current = &fn_compiler;
+
+    begin_scope();
+
+    /* Reserve slot 0 for callee */
+    add_local("");
+
+    for (int i = 0; i < node->as.lambda.params.count; i++) {
+        add_local(node->as.lambda.params.items[i].name);
+    }
+
+    ASTNode* body = node->as.lambda.body;
+    
+    if (body->type == NODE_EXPR_STMT) {
+        compile_expression(body->as.expr_stmt.expr);
+        emit_byte(OP_RETURN, node->line);
+    } else if (body->type <= NODE_LIST_COMP) {
+        compile_expression(body);
+        emit_byte(OP_RETURN, node->line);
+    } else {
+        compile_node(body);
+        emit_byte(OP_NOTHING, node->line);
+        emit_byte(OP_RETURN, node->line);
+    }
+
+    bool had_err = fn_compiler.had_error;
+    current = fn_compiler.enclosing;
+    if (had_err) current->had_error = true;
+
+    int fn_idx = make_constant(val_obj(fn));
+    emit_byte(OP_CONST, node->line);
+    emit_short((uint16_t)fn_idx, node->line);
+}
+
 static void compile_give_back(ASTNode* node) {
     if (node->as.give_back.value) {
         compile_expression(node->as.give_back.value);
@@ -683,6 +878,42 @@ static void compile_give_back(ASTNode* node) {
         emit_byte(OP_NOTHING, node->line);
     }
     emit_byte(OP_RETURN, node->line);
+}
+
+/* ── Defer: schedule cleanup code ── */
+static void compile_defer(ASTNode* node) {
+    /* defer expr — compile the expression for deferred execution
+     * In a full implementation, this would register the expression
+     * with the function's defer stack to run before return.
+     * For now, we'll emit it as a stub opcode. */
+    compile_expression(node->as.defer.expr);
+    emit_byte(OP_DEFER, node->line);
+}
+
+/* ── Await: wait for async result ── */
+static void compile_await(ASTNode* node) {
+    /* await expr — for now, this just evaluates the expression
+     * In a real implementation with async support, this would block
+     * waiting for a promise/future. */
+    compile_expression(node->as.await.expr);
+    emit_byte(OP_AWAIT, node->line);
+}
+
+/* ── Spawn: create a new concurrent task ── */
+static void compile_spawn(ASTNode* node) {
+    /* spawn expr — creates a new task to run the expression */
+    
+    /* Compile the function expression */
+    compile_expression(node->as.spawn.function);
+    
+    /* Compile arguments if any */
+    if (node->as.spawn.args.count > 0) {
+        emit_byte(OP_SPAWN, node->line);
+        emit_byte(node->as.spawn.args.count, node->line);
+    } else {
+        emit_byte(OP_SPAWN, node->line);
+        emit_byte(0, node->line);  /* argc = 0 */
+    }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -706,6 +937,9 @@ static void compile_node(ASTNode* node) {
         case NODE_ARRAY_LITERAL:
         case NODE_MAP_LITERAL:
         case NODE_INDEX:
+        case NODE_LAMBDA:
+        case NODE_LIST_COMP:
+        case NODE_AWAIT:
             compile_expression(node);
             break;
 
@@ -721,12 +955,41 @@ static void compile_node(ASTNode* node) {
 
         case NODE_DISPLAY:      compile_display(node);    break;
         case NODE_IF:           compile_if(node);         break;
+        case NODE_MATCH:        compile_match(node);      break;
         case NODE_WHILE:        compile_while(node);      break;
         case NODE_FOR_RANGE:    compile_for_range(node);  break;
         case NODE_FOR_EACH:     compile_for_each(node);   break;
         case NODE_REPEAT:       compile_repeat(node);     break;
         case NODE_FN_DECL:      compile_fn_decl(node);    break;
-        case NODE_GIVE_BACK:    compile_give_back(node);  break;
+        case NODE_STRUCT_DECL:
+        case NODE_TRAIT:
+        case NODE_IMPL:
+        case NODE_OPERATOR_OVERLOAD:
+        case NODE_USE:
+        case NODE_FROM_USE:
+        case NODE_PASS:
+        case NODE_ATTEMPT:
+        case NODE_SPAWN:
+        case NODE_CHANNEL_CREATE:
+        case NODE_UNSAFE:
+            /* These are handled at runtime or in interpreter */
+            break;
+        
+        case NODE_DEFER:
+            compile_defer(node);
+            break;
+
+        case NODE_GIVE_BACK: {
+            /* Compile the return value expression */
+            if (node->as.give_back.value) {
+                compile_expression(node->as.give_back.value);
+            } else {
+                /* No return value - push nothing */
+                emit_constant(val_nothing_v(), node->line);
+            }
+            emit_byte(OP_RETURN, node->line);
+            break;
+        }
 
         case NODE_EXPR_STMT:
             compile_expression(node->as.expr_stmt.expr);
@@ -745,14 +1008,8 @@ static void compile_node(ASTNode* node) {
             }
             break;
 
-        case NODE_USE:
-        case NODE_FROM_USE:
-            /* For now, skip module system in VM — handled via builtins */
-            break;
-
         case NODE_BREAK:
         case NODE_SKIP:
-        case NODE_PASS:
             break;
 
         default:
