@@ -1,0 +1,36 @@
+display "=== Pythonic Array Ops ==="
+
+let a be [1, 2]
+let b be [3, 4]
+
+let c be a + b
+display len(c)
+display c[0]
+display c[3]
+
+let d be a * 3
+display len(d)
+display d[2]
+display d[5]
+
+let e be 2 * b
+display len(e)
+display e[0]
+display e[3]
+
+let s1 be "ha" * 3
+let s2 be 3 * "go"
+display s1
+display s2
+
+a += [5, 6]
+display len(a)
+display a[2]
+display a[3]
+
+let words be ["x"]
+words *= 3
+display len(words)
+display words[1]
+
+display "=== DONE ==="

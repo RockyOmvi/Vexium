@@ -5,27 +5,27 @@
 task fetch_data(url):
     # Simulates an async operation that fetches data
     display "Fetching from: " + url
-    give back "{\"status\": \"ok\", \"data\": [1, 2, 3]}"
+    give back "ok data"
 
 fn async_example():
     display "=== Testing Await Expressions ==="
     display "Standard synchronous call:"
-    result be fetch_data("https://api.example.com/data")
+    let result be fetch_data("https://api.example.com/data")
     display "Result: " + result  
     display ""
     
     display "With await (for future async support):"
     # Awaiting a promise/task result
-    data be await fetch_data("https://api.example.com/users")
+    let data be await fetch_data("https://api.example.com/users")
     display "Async data: " + data
 
 fn async_multiple():
     display "=== Multiple Async Operations ==="
     display "Fetching multiple resources..."
     
-    user_data be await fetch_data("https://api.example.com/users")
-    product_data be await fetch_data("https://api.example.com/products")
-    order_data be await fetch_data("https://api.example.com/orders")
+    let user_data be await fetch_data("https://api.example.com/users")
+    let product_data be await fetch_data("https://api.example.com/products")
+    let order_data be await fetch_data("https://api.example.com/orders")
     
     display "Received user data: " + user_data
     display "Received product data: " + product_data
@@ -34,7 +34,7 @@ fn async_multiple():
 fn error_handling_async():
     display "=== Async Error Handling ==="
     attempt:
-        result be await fetch_data("https://api.example.com/invalid")
+        let result be await fetch_data("https://api.example.com/invalid")
         display "Success: " + result
     otherwise err:
         display "Error fetching data: " + err

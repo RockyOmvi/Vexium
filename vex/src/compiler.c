@@ -1,5 +1,6 @@
 #include "compiler.h"
 #include "opcodes.h"
+#include "type_system.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,6 +56,105 @@ static void emit_constant(Value val, int line) {
 static int add_string_constant(const char* str, int length) {
     ObjString* s = obj_string_new(str, length);
     return make_constant(val_obj(s));
+}
+
+static bool node_contains_yield(ASTNode* node) {
+    if (!node) return false;
+
+    switch (node->type) {
+        case NODE_YIELD:
+            return true;
+        case NODE_BINARY_OP:
+            return node_contains_yield(node->as.binary.left) || node_contains_yield(node->as.binary.right);
+        case NODE_UNARY_OP:
+            return node_contains_yield(node->as.unary.operand);
+        case NODE_CALL:
+            if (node_contains_yield(node->as.call.callee)) return true;
+            for (int i = 0; i < node->as.call.args.count; i++) {
+                if (node_contains_yield(node->as.call.args.items[i])) return true;
+            }
+            return false;
+        case NODE_INDEX:
+            return node_contains_yield(node->as.index_access.object) || node_contains_yield(node->as.index_access.index);
+        case NODE_FIELD_ACCESS:
+            return node_contains_yield(node->as.field_access.object);
+        case NODE_ARRAY_LITERAL:
+            for (int i = 0; i < node->as.array_literal.elements.count; i++) {
+                if (node_contains_yield(node->as.array_literal.elements.items[i])) return true;
+            }
+            return false;
+        case NODE_MAP_LITERAL:
+            for (int i = 0; i < node->as.map_literal.count; i++) {
+                if (node_contains_yield(node->as.map_literal.entries[i].key) ||
+                    node_contains_yield(node->as.map_literal.entries[i].value)) return true;
+            }
+            return false;
+        case NODE_ASSIGN:
+            return node_contains_yield(node->as.assign.target) || node_contains_yield(node->as.assign.value);
+        case NODE_LET_DECL:
+        case NODE_CONST_DECL:
+            return node_contains_yield(node->as.var_decl.value);
+        case NODE_EXPR_STMT:
+            return node_contains_yield(node->as.expr_stmt.expr);
+        case NODE_DISPLAY:
+            return node_contains_yield(node->as.display.value);
+        case NODE_IF:
+            return node_contains_yield(node->as.if_stmt.condition) ||
+                   node_contains_yield(node->as.if_stmt.then_block) ||
+                   node_contains_yield(node->as.if_stmt.else_block);
+        case NODE_WHILE:
+            return node_contains_yield(node->as.while_stmt.condition) ||
+                   node_contains_yield(node->as.while_stmt.body);
+        case NODE_FOR_RANGE:
+            return node_contains_yield(node->as.for_range.start) ||
+                   node_contains_yield(node->as.for_range.end) ||
+                   node_contains_yield(node->as.for_range.step) ||
+                   node_contains_yield(node->as.for_range.body);
+        case NODE_FOR_EACH:
+            return node_contains_yield(node->as.for_each.iterable) || node_contains_yield(node->as.for_each.body);
+        case NODE_REPEAT:
+            return node_contains_yield(node->as.repeat.count) || node_contains_yield(node->as.repeat.body);
+        case NODE_GIVE_BACK:
+            return node_contains_yield(node->as.give_back.value);
+        case NODE_DEFER:
+            return node_contains_yield(node->as.defer.expr);
+        case NODE_AWAIT:
+            return node_contains_yield(node->as.await.expr);
+        case NODE_SPAWN:
+            if (node_contains_yield(node->as.spawn.function)) return true;
+            for (int i = 0; i < node->as.spawn.args.count; i++) {
+                if (node_contains_yield(node->as.spawn.args.items[i])) return true;
+            }
+            return false;
+        case NODE_LIST_COMP:
+            return node_contains_yield(node->as.list_comp.expr) ||
+                   node_contains_yield(node->as.list_comp.iterable) ||
+                   node_contains_yield(node->as.list_comp.condition);
+        case NODE_MATCH:
+            if (node_contains_yield(node->as.match_stmt.expr)) return true;
+            for (int i = 0; i < node->as.match_stmt.arms.count; i++) {
+                if (node_contains_yield(node->as.match_stmt.arms.items[i].pattern) ||
+                    node_contains_yield(node->as.match_stmt.arms.items[i].body)) return true;
+            }
+            return false;
+        case NODE_ATTEMPT:
+            return node_contains_yield(node->as.attempt.try_block) || node_contains_yield(node->as.attempt.catch_block);
+        case NODE_BLOCK:
+            for (int i = 0; i < node->as.block.statements.count; i++) {
+                if (node_contains_yield(node->as.block.statements.items[i])) return true;
+            }
+            return false;
+        case NODE_PROGRAM:
+            for (int i = 0; i < node->as.program.statements.count; i++) {
+                if (node_contains_yield(node->as.program.statements.items[i])) return true;
+            }
+            return false;
+        case NODE_FN_DECL:
+        case NODE_LAMBDA:
+            return false;
+        default:
+            return false;
+    }
 }
 
 /* ── Jumps ── */
@@ -172,6 +272,7 @@ static void compile_list_comp(ASTNode* node);
 static void compile_match(ASTNode* node);
 static void compile_lambda(ASTNode* node);
 static void compile_defer(ASTNode* node);
+static void compile_yield(ASTNode* node);
 
 /* Helper: check if a node type is an expression */
 static bool is_expression_node(NodeType type) {
@@ -397,6 +498,16 @@ static void compile_call(ASTNode* node) {
     emit_byte((uint8_t)argc, node->line);
 }
 
+static void compile_tail_call(ASTNode* node) {
+    compile_expression(node->as.call.callee);
+    int argc = node->as.call.args.count;
+    for (int i = 0; i < argc; i++) {
+        compile_expression(node->as.call.args.items[i]);
+    }
+    emit_byte(OP_TAIL_CALL, node->line);
+    emit_byte((uint8_t)argc, node->line);
+}
+
 static void compile_array_literal(ASTNode* node) {
     int count = node->as.array_literal.elements.count;
     for (int i = 0; i < count; i++) {
@@ -417,6 +528,18 @@ static void compile_map_literal(ASTNode* node) {
 }
 
 static void compile_index(ASTNode* node) {
+    if (node->as.index_access.is_slice) {
+        int slice_idx = add_string_constant("slice", 5);
+        emit_byte(OP_GET_GLOBAL, node->line);
+        emit_short((uint16_t)slice_idx, node->line);
+        compile_expression(node->as.index_access.object);
+        if (node->as.index_access.index) compile_expression(node->as.index_access.index); else emit_byte(OP_NOTHING, node->line);
+        if (node->as.index_access.end) compile_expression(node->as.index_access.end); else emit_byte(OP_NOTHING, node->line);
+        if (node->as.index_access.step) compile_expression(node->as.index_access.step); else emit_byte(OP_NOTHING, node->line);
+        emit_byte(OP_CALL, node->line);
+        emit_byte(4, node->line);
+        return;
+    }
     compile_expression(node->as.index_access.object);
     compile_expression(node->as.index_access.index);
     emit_byte(OP_INDEX_GET, node->line);
@@ -506,7 +629,7 @@ static void compile_expression(ASTNode* node) {
         case NODE_AWAIT:          compile_await(node); break;
         case NODE_SPAWN:          compile_spawn(node); break;
         case NODE_CHANNEL_CREATE: compile_channel_create(node); break;
-        case NODE_YIELD:          compile_expression(node->as.yield.expr); break;
+        case NODE_YIELD:          compile_yield(node); break;
         default:
             fprintf(stderr, "[Compiler] Expression node type %d not compiled (line %d)\n",
                     node->type, node->line);
@@ -1027,9 +1150,15 @@ static void compile_match(ASTNode* node) {
 
 static void compile_fn_decl(ASTNode* node) {
     const char* name = node->as.fn_decl.name;
+    bool is_generator = node_contains_yield(node->as.fn_decl.body);
 
     ObjFunction* fn = obj_function_new(name);
-    fn->arity = node->as.fn_decl.params.count;
+    {
+        int pcount = node->as.fn_decl.params.count;
+        bool has_var = (pcount > 0 &&
+                        node->as.fn_decl.params.items[pcount - 1].is_variadic);
+        fn->arity = has_var ? -pcount : pcount;
+    }
 
     Compiler fn_compiler;
     fn_compiler.function = fn;
@@ -1042,6 +1171,8 @@ static void compile_fn_decl(ASTNode* node) {
     fn_compiler.loop_scope_depth = 0;
     fn_compiler.loop_exit_count = 0;
     fn_compiler.loop_continue_count = 0;
+    fn_compiler.is_generator = is_generator;
+    fn_compiler.yield_slot = -1;
     current = &fn_compiler;
 
     begin_scope();
@@ -1055,10 +1186,22 @@ static void compile_fn_decl(ASTNode* node) {
         add_local(node->as.fn_decl.params.items[i].name);
     }
 
+    if (is_generator) {
+        emit_byte(OP_ARRAY, node->line);
+        emit_short(0, node->line);
+        add_local("__yield__");
+        current->yield_slot = current->local_count - 1;
+    }
+
     compile_node(node->as.fn_decl.body);
 
-    /* Implicit return nothing */
-    emit_byte(OP_NOTHING, node->line);
+    /* Implicit return nothing, or collected yields for generator functions. */
+    if (is_generator) {
+        emit_byte(OP_GET_LOCAL, node->line);
+        emit_byte((uint8_t)current->yield_slot, node->line);
+    } else {
+        emit_byte(OP_NOTHING, node->line);
+    }
     emit_byte(OP_RETURN, node->line);
 
     bool had_err = fn_compiler.had_error;
@@ -1099,6 +1242,8 @@ static void compile_lambda(ASTNode* node) {
     fn_compiler.loop_scope_depth = 0;
     fn_compiler.loop_exit_count = 0;
     fn_compiler.loop_continue_count = 0;
+    fn_compiler.is_generator = false;
+    fn_compiler.yield_slot = -1;
     current = &fn_compiler;
 
     begin_scope();
@@ -1140,6 +1285,16 @@ static void compile_lambda(ASTNode* node) {
 }
 
 static void compile_give_back(ASTNode* node) {
+    if (current->is_generator) {
+        if (node->as.give_back.value) {
+            compile_expression(node->as.give_back.value);
+            emit_byte(OP_POP, node->line);
+        }
+        emit_byte(OP_GET_LOCAL, node->line);
+        emit_byte((uint8_t)current->yield_slot, node->line);
+        emit_byte(OP_RETURN, node->line);
+        return;
+    }
     if (node->as.give_back.value) {
         compile_expression(node->as.give_back.value);
     } else {
@@ -1165,6 +1320,28 @@ static void compile_await(ASTNode* node) {
      * waiting for a promise/future. */
     compile_expression(node->as.await.expr);
     emit_byte(OP_AWAIT, node->line);
+}
+
+static void compile_yield(ASTNode* node) {
+    if (current->is_generator && current->yield_slot >= 0) {
+        emit_byte(OP_GET_LOCAL, node->line);
+        emit_byte((uint8_t)current->yield_slot, node->line);
+        if (node->as.yield.expr) {
+            compile_expression(node->as.yield.expr);
+        } else {
+            emit_byte(OP_NOTHING, node->line);
+        }
+        emit_byte(OP_ARRAY_PUSH, node->line);
+        emit_byte(OP_POP, node->line);
+        emit_byte(OP_NOTHING, node->line);
+        return;
+    }
+
+    if (node->as.yield.expr) {
+        compile_expression(node->as.yield.expr);
+    } else {
+        emit_byte(OP_NOTHING, node->line);
+    }
 }
 
 /* ── Spawn: create a new concurrent task ── */
@@ -1274,6 +1451,9 @@ static void compile_struct_decl(ASTNode* node) {
     fn_compiler.loop_start = -1;
     fn_compiler.loop_exit_count = 0;
     fn_compiler.loop_continue_count = 0;
+    fn_compiler.loop_scope_depth = 0;
+    fn_compiler.is_generator = false;
+    fn_compiler.yield_slot = -1;
     current = &fn_compiler;
 
     begin_scope();
@@ -1331,8 +1511,11 @@ static void compile_struct_decl(ASTNode* node) {
             m_compiler.upvalue_count = 0;
             m_compiler.had_error = false;
             m_compiler.loop_start = -1;
+            m_compiler.loop_scope_depth = 0;
             m_compiler.loop_exit_count = 0;
             m_compiler.loop_continue_count = 0;
+            m_compiler.is_generator = false;
+            m_compiler.yield_slot = -1;
             current = &m_compiler;
 
             begin_scope();
@@ -1454,8 +1637,11 @@ static void compile_node(ASTNode* node) {
         case NODE_LIST_COMP:
         case NODE_AWAIT:
         case NODE_CHANNEL_CREATE:
-        case NODE_YIELD:
             compile_expression(node);
+            break;
+
+        case NODE_YIELD:
+            compile_yield(node);
             break;
 
         case NODE_ASSIGN:
@@ -1506,14 +1692,20 @@ static void compile_node(ASTNode* node) {
             break;
 
         case NODE_GIVE_BACK: {
-            /* Compile the return value expression */
-            if (node->as.give_back.value) {
+            /* Tail-call position: give back f(args) can reuse current frame. */
+            if (node->as.give_back.value &&
+                node->as.give_back.value->type == NODE_CALL &&
+                current->enclosing != NULL) {
+                compile_tail_call(node->as.give_back.value);
+                emit_byte(OP_RETURN, node->line);
+            } else if (node->as.give_back.value) {
                 compile_expression(node->as.give_back.value);
+                emit_byte(OP_RETURN, node->line);
             } else {
                 /* No return value - push nothing */
                 emit_constant(val_nothing_v(), node->line);
+                emit_byte(OP_RETURN, node->line);
             }
-            emit_byte(OP_RETURN, node->line);
             break;
         }
 
@@ -1534,6 +1726,20 @@ static void compile_node(ASTNode* node) {
             }
             break;
 
+        case NODE_WITH: {
+            /* Scoped context binding: with expr as name { body } */
+            begin_scope();
+            compile_expression(node->as.with_stmt.expr);
+            if (node->as.with_stmt.name) {
+                add_local(node->as.with_stmt.name);
+            } else {
+                add_local("__with__");
+            }
+            compile_node(node->as.with_stmt.body);
+            end_scope(node->line);
+            break;
+        }
+
         default:
             fprintf(stderr, "[Compiler] Node type %d not compiled (line %d)\n",
                     node->type, node->line);
@@ -1546,6 +1752,13 @@ static void compile_node(ASTNode* node) {
  * ══════════════════════════════════════════════════════════════ */
 
 ObjFunction* compile(ASTNode* program) {
+    /* Enforce type correctness before bytecode generation. */
+    int type_errors = vex_type_check(program);
+    if (type_errors != 0) {
+        fprintf(stderr, "[Compiler] Type checking failed with %d error(s).\n", type_errors);
+        return NULL;
+    }
+
     Compiler compiler;
     ObjFunction* fn = obj_function_new("<script>");
     fn->arity = 0;
@@ -1560,6 +1773,8 @@ ObjFunction* compile(ASTNode* program) {
     compiler.loop_exit_count = 0;
     compiler.loop_continue_count = 0;
     compiler.loop_scope_depth = 0;
+    compiler.is_generator = false;
+    compiler.yield_slot = -1;
     current = &compiler;
 
      /* vm_run() pushes the script closure onto vm->stack[0] before executing,

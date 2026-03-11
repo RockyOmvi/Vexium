@@ -1,0 +1,47 @@
+display "=== GPU Module Smoke Test ==="
+
+from gpu use available
+from gpu use backend
+from gpu use device_count
+from gpu use dot
+from gpu use matmul
+from gpu use kernel_compile
+from gpu use kernel_launch
+from gpu use alloc
+from gpu use free
+from gpu use write
+from gpu use read
+
+display "backend: " + backend()
+display "available: " + str(available())
+display "device_count: " + str(device_count())
+
+let v1 be [1, 2, 3]
+let v2 be [4, 5, 6]
+display "dot([1,2,3],[4,5,6]) = " + str(dot(v1, v2))
+
+let a be [[1, 2], [3, 4]]
+let b be [[5, 6], [7, 8]]
+let c be matmul(a, b)
+display "matmul([[1,2],[3,4]], [[5,6],[7,8]]) = " + str(c)
+
+let ok be kernel_compile("saxpy", "kernel body")
+display "kernel_compile(...) = " + str(ok)
+display "kernel_launch(saxpy, 80, 256) = " + str(kernel_launch("saxpy", 80, 256))
+
+let ok2 be kernel_compile("logical_saxpy", "saxpy", "kernel body")
+display "kernel_compile(logical_saxpy, saxpy, ...) = " + str(ok2)
+display "kernel_launch(logical_saxpy, 40, 128) = " + str(kernel_launch("logical_saxpy", 40, 128))
+
+let cuda_src be "__global__ void saxpy(double_ptr_x, n, a)"
+let ok_cuda be kernel_compile("cuda_saxpy", "saxpy", cuda_src)
+display "kernel_compile(cuda_saxpy, saxpy, cuda_src) = " + str(ok_cuda)
+
+let buf be alloc(6)
+display "alloc(6) -> " + str(buf)
+display "write(buf, [10,20,30,40]) = " + str(write(buf, [10, 20, 30, 40]))
+display "kernel_launch(cuda_saxpy, 1, 64, [buf, 4, 2.0]) = " + str(kernel_launch("cuda_saxpy", 1, 64, [buf, 4, 2.0]))
+display "kernel_launch(saxpy, 80, 256, [buf, 4, 2.0]) = " + str(kernel_launch("saxpy", 80, 256, [buf, 4, 2.0]))
+display "read(buf) = " + str(read(buf))
+display "read(buf, 2) = " + str(read(buf, 2))
+display "free(buf) = " + str(free(buf))

@@ -1,0 +1,38 @@
+display "=== Simple ML Train Smoke ==="
+
+from ai use tensor_fill
+from ai use tensor_mean
+from ai use nn_new
+from ai use nn_add_dense
+from ai use nn_train_step
+from ai use nn_forward
+from ai use nn_save
+from ai use nn_load
+from ai use nn_free
+
+# Tiny deterministic synthetic dataset with 784 features to match current Dense default input shape
+let x be tensor_fill([32, 784], 0.1)
+let y be tensor_fill([32, 1], 1.0)
+
+let model be nn_new("linreg_smoke")
+let d1 be nn_add_dense(model, 1, "tanh")
+display "layer added: " + str(d1)
+
+# Do a few train steps and ensure loss is numeric and finite
+let s1 be nn_train_step(model, x, y, 16)
+let s2 be nn_train_step(model, x, y, 16)
+let s3 be nn_train_step(model, x, y, 16)
+display "train losses: " + str(s1) + " " + str(s2) + " " + str(s3)
+
+let pred be nn_forward(model, x)
+let mean_pred be tensor_mean(pred)
+display "mean(pred): " + str(mean_pred)
+
+let saved be nn_save(model, "tmp_model.vxn")
+display "saved: " + str(saved)
+let loaded be nn_load("tmp_model.vxn")
+display "loaded handle > 0: " + str(loaded > 0)
+display "free loaded: " + str(nn_free(loaded))
+
+display "free model: " + str(nn_free(model))
+display "=== DONE ==="

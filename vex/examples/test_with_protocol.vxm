@@ -1,0 +1,17 @@
+# Test with statement enter/exit protocol (interpreter only)
+
+display "=== With Enter/Exit Test ==="
+
+struct Resource:
+    can enter(self):
+        display "enter called"
+        give back self
+
+    can exit(self):
+        display "exit called"
+
+let r be Resource()
+with r as ctx:
+    display "body executing"
+
+display "=== With Enter/Exit PASS ==="

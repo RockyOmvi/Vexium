@@ -1,0 +1,22 @@
+# Test with statement
+
+display "=== With Statement Test ==="
+
+# Basic with: scoped binding
+let value be 99
+with value as v:
+    display "v = " + str(v)
+
+# Nested with
+let a be 10
+let b be 20
+with a as x:
+    with b as y:
+        display "x + y = " + str(x + y)
+
+# With without name (just scoping)
+let counter be 5
+with counter:
+    display "counter is " + str(counter)
+
+display "=== With Basic PASS ==="

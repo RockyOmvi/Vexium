@@ -138,6 +138,8 @@ static Keyword keywords[] = {
     {"otherwise", 9,  TOKEN_OTHERWISE},
     {"unsafe",    6,  TOKEN_UNSAFE},
     {"extends",   7,  TOKEN_EXTENDS},
+    {"with",      4,  TOKEN_WITH},
+    {"as",        2,  TOKEN_AS},
     {"display",   7,  TOKEN_DISPLAY},
     {"exists",    6,  TOKEN_EXISTS},
     {NULL,        0,  TOKEN_ERROR}

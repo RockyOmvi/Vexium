@@ -96,6 +96,7 @@ static const char* node_type_name(NodeType type) {
         case NODE_FROM_USE:        return "FromUse";
         case NODE_ATTEMPT:         return "Attempt";
         case NODE_PASS:            return "Pass";
+        case NODE_WITH:            return "With";
         case NODE_BLOCK:           return "Block";
         case NODE_PROGRAM:         return "Program";
         case NODE_LAMBDA:          return "Lambda";
@@ -159,9 +160,13 @@ void ast_print(ASTNode* node, int indent) {
             break;
 
         case NODE_INDEX:
-            printf("Index\n");
+            printf(node->as.index_access.is_slice ? "Slice\n" : "Index\n");
             ast_print(node->as.index_access.object, indent + 1);
             ast_print(node->as.index_access.index, indent + 1);
+            if (node->as.index_access.is_slice) {
+                ast_print(node->as.index_access.end, indent + 1);
+                ast_print(node->as.index_access.step, indent + 1);
+            }
             break;
 
         case NODE_FIELD_ACCESS:
@@ -416,6 +421,8 @@ void ast_free(ASTNode* node) {
         case NODE_INDEX:
             ast_free(node->as.index_access.object);
             ast_free(node->as.index_access.index);
+            ast_free(node->as.index_access.end);
+            ast_free(node->as.index_access.step);
             break;
         case NODE_FIELD_ACCESS:
             ast_free(node->as.field_access.object);
@@ -522,6 +529,11 @@ void ast_free(ASTNode* node) {
             ast_free(node->as.attempt.try_block);
             free(node->as.attempt.error_name);
             ast_free(node->as.attempt.catch_block);
+            break;
+        case NODE_WITH:
+            ast_free(node->as.with_stmt.expr);
+            free(node->as.with_stmt.name);
+            ast_free(node->as.with_stmt.body);
             break;
         case NODE_BLOCK:
             for (int i = 0; i < node->as.block.statements.count; i++)

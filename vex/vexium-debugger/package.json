@@ -1,0 +1,95 @@
+{
+  "name": "vexium-debugger",
+  "displayName": "Vexium Debugger",
+  "description": "Debug Vexium (.vxm) programs in VS Code — breakpoints, stepping, variables, call stack",
+  "version": "1.0.0",
+  "publisher": "vexium",
+  "icon": "icon.png",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "keywords": [
+    "vexium",
+    "debugger",
+    "debug",
+    "vxm"
+  ],
+  "activationEvents": [
+    "onDebugResolve:vexium",
+    "onDebugDynamicConfigurations:vexium"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "breakpoints": [
+      { "language": "vexium" }
+    ],
+    "debuggers": [
+      {
+        "type": "vexium",
+        "label": "Vexium Debug",
+        "program": "./src/debugAdapter.js",
+        "runtime": "node",
+        "languages": ["vexium"],
+        "configurationAttributes": {
+          "launch": {
+            "required": ["program"],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to the .vxm file to debug.",
+                "default": "${file}"
+              },
+              "runtimePath": {
+                "type": "string",
+                "description": "Path to vexium.exe. Auto-detected if left blank.",
+                "default": ""
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Pause automatically on the first line.",
+                "default": true
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "vexium",
+            "request": "launch",
+            "name": "Debug Vexium File",
+            "program": "${file}",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Vexium: Launch",
+            "description": "Launch and debug the current .vxm file",
+            "body": {
+              "type": "vexium",
+              "request": "launch",
+              "name": "${1:Debug Vexium}",
+              "program": "^\"\\${file}\"",
+              "stopOnEntry": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vexium/vexium-debugger"
+  },
+  "files": [
+    "icon.png",
+    "src/**",
+    "README.md",
+    "LICENSE.txt",
+    "package.json"
+  ]
+}

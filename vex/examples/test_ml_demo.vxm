@@ -1,0 +1,101 @@
+from ai use tensor_fill
+from ai use tensor_rand
+from ai use tensor_sub
+from ai use tensor_mul
+from ai use tensor_mean
+from ai use tensor_free
+from ai use nn_new
+from ai use nn_add_dense
+from ai use nn_forward
+from ai use nn_train_step
+from ai use nn_free
+
+display "======================================================"
+display "  Vexium ML Training Demo  (100 epochs)"
+display "  Architecture: Dense(32,relu) -> Dense(1,tanh)"
+display "  Task: Regression to constant target (y=1.0)"
+display "======================================================"
+display ""
+
+let n_samples  be 128
+let n_features be 16
+let n_outputs  be 1
+
+let X be tensor_rand([n_samples, n_features])
+let y be tensor_fill([n_samples, n_outputs], 1.0)
+
+let model be nn_new("mlp_100ep")
+nn_add_dense(model, 32, "relu", n_features)
+nn_add_dense(model, n_outputs, "tanh")
+
+display "Dataset    : " + str(n_samples) + " samples, " + str(n_features) + " features"
+display "Batch size : 32"
+display ""
+display "  Epoch |    MSE Loss     | Delta (vs prev)"
+display "----------------------------------------------"
+
+let epoch be 1
+let prev_loss be 9999.0
+let first_loss be 0.0
+let improved be 0
+
+while epoch <= 100:
+    nn_train_step(model, X, y, 32)
+    let p be nn_forward(model, X)
+    let d be tensor_sub(p, y)
+    let s be tensor_mul(d, d)
+    let mse be tensor_mean(s)
+    if epoch == 1:
+        first_loss be mse
+    let trend be "v down"
+    if mse >= prev_loss:
+        trend be "- flat"
+    else:
+        improved be improved + 1
+    if epoch == 1:
+        display "  [init]  | " + str(first_loss) + " | -"
+    elif epoch == 10:
+        display "  [ 10]   | " + str(mse) + " | " + trend
+    elif epoch == 25:
+        display "  [ 25]   | " + str(mse) + " | " + trend
+    elif epoch == 50:
+        display "  [ 50]   | " + str(mse) + " | " + trend
+    elif epoch == 75:
+        display "  [ 75]   | " + str(mse) + " | " + trend
+    elif epoch == 100:
+        display "  [100]   | " + str(mse) + " | " + trend
+    prev_loss be mse
+    tensor_free(d)
+    tensor_free(s)
+    epoch be epoch + 1
+
+display "----------------------------------------------"
+display ""
+
+let fp be nn_forward(model, X)
+let fd be tensor_sub(fp, y)
+let fs be tensor_mul(fd, fd)
+let final_mse be tensor_mean(fs)
+let reduction be first_loss - final_mse
+
+display "Summary:"
+display "  Initial MSE     : " + str(first_loss)
+display "  Final MSE       : " + str(final_mse)
+display "  Loss reduction  : " + str(reduction)
+display "  Improved epochs : " + str(improved) + " / 99"
+if final_mse < 0.5:
+    display "  Status          : CONVERGED (MSE < 0.5)"
+else:
+    display "  Status          : STILL TRAINING"
+
+nn_free(model)
+tensor_free(X)
+tensor_free(y)
+tensor_free(fp)
+tensor_free(fd)
+tensor_free(fs)
+
+display ""
+display "======================================================"
+display "  Training COMPLETE"
+display "======================================================"

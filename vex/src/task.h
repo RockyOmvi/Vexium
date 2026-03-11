@@ -74,6 +74,8 @@ typedef struct Task {
     /* VM context for this task */
     void* vm;                    /* Each task has its own VM instance (VM*) */
     ObjClosure* closure;         /* The function to execute */
+    Value* args;                 /* Spawn-call arguments (copied values) */
+    int arg_count;               /* Number of arguments */
     
     /* Result */
     Value result;
@@ -153,7 +155,7 @@ void task_system_init(void);
 void task_system_shutdown(void);
 
 /* Task creation */
-Task* task_create(ObjClosure* closure, bool blocking);
+Task* task_create(ObjClosure* closure, bool blocking, Value* args, int argc);
 void task_destroy(Task* task);
 
 /* Task lifecycle */

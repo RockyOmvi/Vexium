@@ -1,0 +1,32 @@
+from ai use tensor_rand
+from ai use tensor_ones
+from ai use tensor_shape
+from ai use tensor_free
+from ai use attention
+from ai use layernorm
+from ai use embedding_lookup
+
+# --- attention ---
+let q be tensor_rand([4, 8])
+let k be tensor_rand([4, 8])
+let v be tensor_rand([4, 8])
+let out be attention(q, k, v)
+display "attention shape: " + str(tensor_shape(out))
+tensor_free(out)
+tensor_free(q)
+tensor_free(k)
+tensor_free(v)
+
+# --- layernorm ---
+let x be tensor_rand([3, 16])
+let ln be layernorm(x)
+display "layernorm handle > 0: " + str(ln > 0)
+tensor_free(ln)
+tensor_free(x)
+
+# --- embedding_lookup ---
+let emb_table be tensor_rand([100, 32])
+let emb be embedding_lookup(emb_table, 7)
+display "embed shape: " + str(tensor_shape(emb))
+tensor_free(emb)
+tensor_free(emb_table)

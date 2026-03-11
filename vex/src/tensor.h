@@ -221,11 +221,16 @@ typedef struct NNModel {
     bool training;
 } NNModel;
 
+typedef enum {
+    LOSS_MSE,
+    LOSS_CROSS_ENTROPY
+} LossType;
+
 /* Create new neural network model */
 NNModel* nn_model_new(const char* name);
 
 /* Add dense layer */
-void nn_model_add_dense(NNModel* model, int units, ActivationType activation);
+void nn_model_add_dense(NNModel* model, int units, ActivationType activation, int input_size_override);
 
 /* Add convolutional layer */
 void nn_model_add_conv2d(NNModel* model, int filters, int kernel_size, 
@@ -247,10 +252,17 @@ void nn_model_backward(NNModel* model, Tensor* loss);
 void nn_model_update(NNModel* model);
 
 /* Train one epoch */
-void nn_model_train(NNModel* model, Tensor* X, Tensor* y, int batch_size);
+double nn_model_train(NNModel* model, Tensor* X, Tensor* y, int batch_size);
+
+/* Train one epoch with explicit loss type */
+double nn_model_train_with_loss(NNModel* model, Tensor* X, Tensor* y, int batch_size, LossType loss_type);
 
 /* Predict */
 Tensor* nn_model_predict(NNModel* model, Tensor* input);
+
+/* Learning rate controls */
+void nn_model_set_learning_rate(NNModel* model, double learning_rate);
+double nn_model_get_learning_rate(NNModel* model);
 
 /* Save model to file (JSON format) */
 bool nn_model_save(NNModel* model, const char* filepath);
@@ -294,6 +306,14 @@ typedef struct {
     Tensor* m;  /* First moment estimate */
     Tensor* v;  /* Second moment estimate */
 } AdamOptimizer;
+
+/* RMSprop optimizer */
+typedef struct {
+    double lr;
+    double rho;
+    double epsilon;
+    Tensor* avg_sq_grad;
+} RMSpropOptimizer;
 
 /* Create optimizer */
 void* optimizer_create(OptimizerType type, double lr);

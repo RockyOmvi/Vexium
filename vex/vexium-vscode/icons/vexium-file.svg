@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Dark navy background -->
+  <rect width="24" height="24" rx="3" fill="#06123C"/>
+  <!-- Left wing -->
+  <path d="M2 3 C5 2, 10 8, 12 18 C10 10, 5 7, 2 8 Z" fill="#0F37A0"/>
+  <path d="M2.5 3.5 C5.5 2.5, 10.5 9, 12 18 C10.5 10.5, 5.5 6.5, 2.5 7 Z" fill="#3C78E6" opacity="0.7"/>
+  <!-- Right wing -->
+  <path d="M22 3 C19 2, 14 8, 12 18 C14 10, 19 7, 22 8 Z" fill="#0F37A0"/>
+  <path d="M21.5 3.5 C18.5 2.5, 13.5 9, 12 18 C13.5 10.5, 18.5 6.5, 21.5 7 Z" fill="#3C78E6" opacity="0.7"/>
+  <!-- White V dot at tip -->
+  <circle cx="12" cy="18.5" r="1.2" fill="#FFFFFF" opacity="0.9"/>
+</svg>

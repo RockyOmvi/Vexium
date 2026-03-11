@@ -1,0 +1,183 @@
+display "=== AI Module Smoke Test ==="
+
+from ai use tensor_zeros
+from ai use tensor_ones
+from ai use tensor_rand
+from ai use tensor_randn
+from ai use tensor_fill
+from ai use tensor_clone
+from ai use tensor_matmul
+from ai use tensor_add
+from ai use tensor_sub
+from ai use tensor_mul
+from ai use tensor_scale
+from ai use tensor_relu
+from ai use tensor_sigmoid
+from ai use tensor_softmax
+from ai use tensor_reshape
+from ai use tensor_transpose
+from ai use tensor_sum
+from ai use tensor_mean
+from ai use tensor_std
+from ai use tensor_max
+from ai use tensor_min
+from ai use tensor_shape
+from ai use tensor_free
+from ai use tensor_from_array
+from ai use tensor_to_array
+from ai use optimizer_create
+from ai use optimizer_step
+from ai use optimizer_free
+from ai use nn_new
+from ai use nn_add_dense
+from ai use nn_add_conv2d
+from ai use nn_add_dropout
+from ai use nn_add_maxpool2d
+from ai use nn_predict
+from ai use nn_train_step
+from ai use nn_set_lr
+from ai use nn_get_lr
+from ai use nn_save
+from ai use nn_load
+from ai use nn_export_vxnn
+from ai use nn_import_vxnn
+from ai use nn_free
+from ai use reset
+from ai use tokenize
+
+display "--- tensor creation ---"
+let a be tensor_rand([2, 3])
+let b be tensor_zeros([3, 2])
+let ones be tensor_ones([2, 2])
+let filled be tensor_fill([2, 2], 5.0)
+let c be tensor_matmul(a, b)
+display "shape(c): " + str(tensor_shape(c))
+display "sum(zeros): " + str(tensor_sum(b))
+display "sum(ones): " + str(tensor_sum(ones))
+display "sum(fill 5): " + str(tensor_sum(filled))
+
+display "--- element-wise ops ---"
+let x be tensor_ones([2, 2])
+let y be tensor_fill([2, 2], 3.0)
+let xy_add be tensor_add(x, y)
+let xy_mul be tensor_mul(x, y)
+display "add sum: " + str(tensor_sum(xy_add))
+display "mul sum: " + str(tensor_sum(xy_mul))
+let scaled be tensor_scale(x, 7.0)
+display "scale sum: " + str(tensor_sum(scaled))
+
+display "--- activations ---"
+let rx be tensor_fill([3, 1], -1.0)
+let ry be tensor_relu(rx)
+display "relu(-1) sum: " + str(tensor_sum(ry))
+let sx be tensor_fill([2, 2], 0.0)
+let sm be tensor_softmax(sx)
+display "softmax sum (should be ~2): " + str(tensor_sum(sm))
+
+display "--- reductions ---"
+let rv be tensor_fill([4, 1], 2.0)
+display "mean: " + str(tensor_mean(rv))
+display "std: " + str(tensor_std(rv))
+display "max: " + str(tensor_max(rv))
+display "min: " + str(tensor_min(rv))
+
+display "--- reshape / transpose ---"
+let t2 be tensor_ones([6, 1])
+let t3 be tensor_reshape(t2, [2, 3])
+display "reshape [6,1] to [2,3] shape: " + str(tensor_shape(t3))
+let t4 be tensor_transpose(t3)
+display "transpose shape: " + str(tensor_shape(t4))
+
+display "--- array <-> tensor bridge ---"
+let arr1 be [1, 2, 3, 4]
+let h1 be tensor_from_array(arr1)
+let back1 be tensor_to_array(h1)
+display "bridge 1d len: " + str(len(back1)) + " first: " + str(back1[0])
+
+let arr2 be [[1, 2], [3, 4], [5, 6]]
+let h2 be tensor_from_array(arr2)
+let back2 be tensor_to_array(h2)
+display "bridge 2d rows: " + str(len(back2)) + " cols: " + str(len(back2[0])) + " last: " + str(back2[2][1])
+display "free h1: " + str(tensor_free(h1))
+display "free h2: " + str(tensor_free(h2))
+
+display "--- optimizer ---"
+let opt be optimizer_create("adam", 0.001)
+display "opt handle: " + str(opt)
+let param be tensor_ones([4, 1])
+let grad be tensor_fill([4, 1], 0.1)
+let stepped be optimizer_step(opt, param, grad)
+display "optimizer_step ok: " + str(stepped)
+display "free opt: " + str(optimizer_free(opt))
+
+display "--- neural network model ---"
+let model be nn_new("mlp")
+display "model handle: " + str(model)
+let ok1 be nn_add_dense(model, 8, "relu", 16)
+let ok2 be nn_add_dense(model, 1, "tanh")
+display "add_dense: " + str(ok1) + " " + str(ok2)
+display "set lr: " + str(nn_set_lr(model, 0.01))
+display "get lr: " + str(nn_get_lr(model))
+let train_x be tensor_ones([8, 16])
+let train_y be tensor_fill([8, 1], 1.0)
+let loss1 be nn_train_step(model, train_x, train_y, 4)
+display "train loss: " + str(loss1)
+let pred_handle be nn_predict(model, train_x)
+display "predict handle: " + str(pred_handle)
+let loss1_direct be nn_train_step(model, [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]], [[1],[1]], 2)
+display "train loss (direct arrays): " + str(loss1_direct)
+let pred_direct be nn_predict(model, [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]])
+display "predict handle (direct arrays): " + str(pred_direct)
+let saved be nn_save(model, "tmp_model.vxn")
+display "nn_save: " + str(saved)
+let loaded be nn_load("tmp_model.vxn")
+display "nn_load handle: " + str(loaded)
+display "free loaded: " + str(nn_free(loaded))
+display "free predict: " + str(tensor_free(pred_handle))
+display "free predict direct: " + str(tensor_free(pred_direct))
+display "free train_x: " + str(tensor_free(train_x))
+display "free train_y: " + str(tensor_free(train_y))
+display "nn_free: " + str(nn_free(model))
+
+display "--- classification training ---"
+let clf be nn_new("clf")
+display "clf handle: " + str(clf)
+display "clf add1: " + str(nn_add_dense(clf, 4, "relu", 4))
+display "clf add2: " + str(nn_add_dense(clf, 2, "softmax"))
+display "clf lr set: " + str(nn_set_lr(clf, 0.005))
+let cls_x be tensor_fill([6, 4], 0.25)
+let cls_y be tensor_fill([6, 2], 0.5)
+let cls_loss be nn_train_step(clf, cls_x, cls_y, 3, "cross_entropy")
+display "cross entropy loss: " + str(cls_loss)
+display "free cls_x: " + str(tensor_free(cls_x))
+display "free cls_y: " + str(tensor_free(cls_y))
+display "free clf: " + str(nn_free(clf))
+
+display "--- conv/dropout/maxpool pipeline ---"
+let cnn be nn_new("cnn_like")
+display "cnn handle: " + str(cnn)
+display "cnn conv: " + str(nn_add_conv2d(cnn, 2, 3, 1, 1, "relu"))
+display "cnn pool: " + str(nn_add_maxpool2d(cnn, 2, 2))
+display "cnn drop: " + str(nn_add_dropout(cnn, 0.2))
+display "cnn out : " + str(nn_add_dense(cnn, 1, "tanh", 16))
+let cnn_x be tensor_fill([8, 16], 0.2)
+let cnn_y be tensor_fill([8, 1], 1.0)
+let cnn_loss be nn_train_step(cnn, cnn_x, cnn_y, 4)
+display "cnn loss: " + str(cnn_loss)
+let cnn_pred be nn_predict(cnn, cnn_x)
+display "cnn pred handle: " + str(cnn_pred)
+display "vxnn export: " + str(nn_export_vxnn(cnn, "tmp_cnn.vxn"))
+let cnn2 be nn_import_vxnn("tmp_cnn.vxn")
+display "vxnn import handle: " + str(cnn2)
+display "free cnn2: " + str(nn_free(cnn2))
+display "free cnn pred: " + str(tensor_free(cnn_pred))
+display "free cnn_x: " + str(tensor_free(cnn_x))
+display "free cnn_y: " + str(tensor_free(cnn_y))
+display "free cnn: " + str(nn_free(cnn))
+
+display "reset ai module: " + str(reset())
+
+display "--- tokenize ---"
+display str(tokenize("modern ai stack"))
+
+display "=== DONE ==="

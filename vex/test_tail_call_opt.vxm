@@ -41,41 +41,41 @@ fn test_factorial():
     display "=== Testing Tail Call Optimization ==="
     display "Regular factorial:"
     
-    f5 be factorial(5)
+    let f5 be factorial(5)
     display "factorial(5) = " + type(f5)
     
-    f10 be factorial(10)
+    let f10 be factorial(10)
     display "factorial(10) = " + type(f10)
     display ""
     
     display "TCO factorial (uses same approach):"
-    f5_tco be factorial_tco(5)
+    let f5_tco be factorial_tco(5)
     display "factorial_tco(5) = " + type(f5_tco)
     
-    f10_tco be factorial_tco(10)
+    let f10_tco be factorial_tco(10)
     display "factorial_tco(10) = " + type(f10_tco)
 
 fn test_sum_tco():
     display "=== Testing Sum with TCO ==="
     
-    sum_100 be sum_to_n(100)
+    let sum_100 be sum_to_n(100)
     display "sum_to_n(100) = " + type(sum_100)
     
-    sum_1000 be sum_to_n(1000)
+    let sum_1000 be sum_to_n(1000)
     display "sum_to_n(1000) = " + type(sum_1000)
     
-    sum_10000 be sum_to_n(10000)
+    let sum_10000 be sum_to_n(10000)
     display "sum_to_n(10000) = " + type(sum_10000)
 
 fn test_array_processing():
     display "=== Testing Array Processing with TCO ==="
     
-    arr be [1, 2, 3, 4, 5]
-    total be process_array_tco(arr)
+    let arr be [1, 2, 3, 4, 5]
+    let total be process_array_tco(arr)
     display "Sum of [1,2,3,4,5]: " + type(total)
     
-    arr2 be [10, 20, 30, 40, 50]
-    total2 be process_array_tco(arr2)
+    let arr2 be [10, 20, 30, 40, 50]
+    let total2 be process_array_tco(arr2)
     display "Sum of [10,20,30,40,50]: " + type(total2)
 
 fn test_countdown():

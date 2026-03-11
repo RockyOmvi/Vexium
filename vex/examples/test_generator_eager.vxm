@@ -1,0 +1,17 @@
+display "=== Generator Smoke ==="
+
+fn count_up(n):
+    let i be 0
+    while i < n:
+        yield i
+        i be i + 1
+
+let vals be count_up(5)
+display len(vals)
+display vals[0]
+display vals[4]
+
+for each x in count_up(3):
+    display x
+
+display "=== DONE ==="

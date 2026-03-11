@@ -1,0 +1,25 @@
+display "=== Data Module Test ==="
+
+from data use csv_write
+from data use csv_read
+from data use split
+from data use shuffle
+
+display "--- csv write/read ---"
+let rows be [{"name": "Alice", "age": 30, "score": 9.5}, {"name": "Bob", "age": 25, "score": 8.1}, {"name": "Carol", "age": 35, "score": 7.7}]
+let wrote be csv_write("test_out.csv", rows)
+display "wrote: " + str(wrote)
+let loaded be csv_read("test_out.csv")
+display "rows loaded: " + str(len(loaded))
+
+display "--- split ---"
+let nums be [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+let parts be split(nums, 0.8)
+display "train size: " + str(len(parts[0]))
+display "test size: " + str(len(parts[1]))
+
+display "--- shuffle ---"
+let s be shuffle(nums)
+display "shuffled len: " + str(len(s))
+
+display "=== DONE ==="

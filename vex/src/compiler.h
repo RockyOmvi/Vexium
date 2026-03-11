@@ -46,6 +46,9 @@ typedef struct Compiler {
     int loop_continue_jumps[MAX_BREAK_JUMPS]; /* pending skip (continue) jump offsets to patch */
     int loop_continue_count;    /* number of pending skip jumps */
 
+    bool is_generator;
+    int yield_slot;
+
     bool had_error;
 } Compiler;
 

@@ -70,6 +70,8 @@ typedef enum VexiumTokenType {
     TOKEN_OTHERWISE,        /* otherwise */
     TOKEN_UNSAFE,           /* unsafe */
     TOKEN_EXTENDS,          /* extends */
+    TOKEN_WITH,             /* with */
+    TOKEN_AS,               /* as */
 
     /* Keywords: I/O */
     TOKEN_DISPLAY,          /* display */

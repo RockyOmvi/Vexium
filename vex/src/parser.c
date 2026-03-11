@@ -72,6 +72,7 @@ static ASTNode* parse_expression(Parser* p);
 static ASTNode* parse_statement(Parser* p);
 static ASTNode* parse_block(Parser* p);
 static ASTNode* parse_give_back(Parser* p);
+static ASTNode* parse_channel_decl(Parser* p);
 
 /* ══════════════════════════════════════════════════════════════
  *  EXPRESSION PARSING (Pratt / precedence climbing)
@@ -474,12 +475,33 @@ static ASTNode* parse_postfix(Parser* p) {
             consume(p, TOKEN_RPAREN, "Expected ')' after arguments");
             expr = call;
         }
-        /* Index: expr[index] */
+        /* Index or slice: expr[index] / expr[start:end:step] */
         else if (match_token(p, TOKEN_LBRACKET)) {
             ASTNode* idx = ast_new_node(NODE_INDEX, expr->line, expr->column);
             idx->as.index_access.object = expr;
-            idx->as.index_access.index = parse_expression(p);
-            consume(p, TOKEN_RBRACKET, "Expected ']' after index");
+            idx->as.index_access.index = NULL;
+            idx->as.index_access.end = NULL;
+            idx->as.index_access.step = NULL;
+            idx->as.index_access.is_slice = false;
+
+            if (!check(p, TOKEN_RBRACKET) && !check(p, TOKEN_COLON)) {
+                idx->as.index_access.index = parse_expression(p);
+            }
+
+            if (match_token(p, TOKEN_COLON)) {
+                idx->as.index_access.is_slice = true;
+                if (!check(p, TOKEN_RBRACKET) && !check(p, TOKEN_COLON)) {
+                    idx->as.index_access.end = parse_expression(p);
+                }
+                if (match_token(p, TOKEN_COLON)) {
+                    if (!check(p, TOKEN_RBRACKET)) {
+                        idx->as.index_access.step = parse_expression(p);
+                    }
+                }
+                consume(p, TOKEN_RBRACKET, "Expected ']' after slice");
+            } else {
+                consume(p, TOKEN_RBRACKET, "Expected ']' after index");
+            }
             expr = idx;
         }
         /* Field access: expr.field */
@@ -717,6 +739,7 @@ static ASTNode* parse_fn(Parser* p) {
 
     if (!check(p, TOKEN_RPAREN)) {
         do {
+            bool is_variadic = match_token(p, TOKEN_STAR);
             Token pname = consume(p, TOKEN_IDENTIFIER, "Expected parameter name");
             char* ptype = NULL;
             if (match_token(p, TOKEN_COLON)) {
@@ -724,11 +747,14 @@ static ASTNode* parse_fn(Parser* p) {
                 ptype = token_text(pt);
             }
             paramlist_add(&params, token_text(pname), ptype);
+            params.items[params.count - 1].is_variadic = is_variadic;
             /* Default parameter value: fn foo(x be 5): */
-            if (match_token(p, TOKEN_BE)) {
+            if (!is_variadic && match_token(p, TOKEN_BE)) {
                 params.items[params.count - 1].default_value = parse_expression(p);
             }
             if (ptype) free(ptype);
+            /* *args must be the last parameter */
+            if (is_variadic) break;
         } while (match_token(p, TOKEN_COMMA));
     }
     consume(p, TOKEN_RPAREN, "Expected ')' after parameters");
@@ -761,6 +787,55 @@ static ASTNode* parse_give_back(Parser* p) {
     ASTNode* node = ast_new_node(NODE_GIVE_BACK, kw.line, kw.column);
     node->as.give_back.value = value;
     return node;
+}
+
+/* ── channel name / channel name(capacity) ── */
+static ASTNode* parse_channel_decl(Parser* p) {
+    Token kw = p->previous;
+    ASTNode* ch = ast_new_node(NODE_CHANNEL_CREATE, kw.line, kw.column);
+    ch->as.channel_create.capacity = 0;
+
+    if (check(p, TOKEN_IDENTIFIER)) {
+        Token name = p->current;
+        advance_token(p);
+
+        if (match_token(p, TOKEN_LPAREN)) {
+            if (!check(p, TOKEN_RPAREN)) {
+                if (match_token(p, TOKEN_INT)) {
+                    char* text = token_text(p->previous);
+                    ch->as.channel_create.capacity = (int)strtol(text, NULL, 10);
+                    free(text);
+                } else {
+                    /* Capacity expression currently ignored by codegen; parse for syntax. */
+                    parse_expression(p);
+                }
+            }
+            consume(p, TOKEN_RPAREN, "Expected ')' after channel capacity");
+        }
+
+        ASTNode* decl = ast_new_node(NODE_LET_DECL, kw.line, kw.column);
+        decl->as.var_decl.name = token_text(name);
+        decl->as.var_decl.type_name = NULL;
+        decl->as.var_decl.value = ch;
+        return decl;
+    }
+
+    if (match_token(p, TOKEN_LPAREN)) {
+        if (!check(p, TOKEN_RPAREN)) {
+            if (match_token(p, TOKEN_INT)) {
+                char* text = token_text(p->previous);
+                ch->as.channel_create.capacity = (int)strtol(text, NULL, 10);
+                free(text);
+            } else {
+                parse_expression(p);
+            }
+        }
+        consume(p, TOKEN_RPAREN, "Expected ')' after channel arguments");
+    }
+
+    ASTNode* stmt = ast_new_node(NODE_EXPR_STMT, kw.line, kw.column);
+    stmt->as.expr_stmt.expr = ch;
+    return stmt;
 }
 
 /* ── defer expr ── */
@@ -1116,7 +1191,11 @@ static ASTNode* parse_statement(Parser* p) {
 
     /* fn */
     if (match_token(p, TOKEN_FN))      return parse_fn(p);
+    if (match_token(p, TOKEN_TASK))    return parse_fn(p);
     if (match_token(p, TOKEN_CAN))     return parse_fn(p);
+
+    /* channel declaration shorthand */
+    if (match_token(p, TOKEN_CHANNEL)) return parse_channel_decl(p);
 
     /* give back */
     if (match_token(p, TOKEN_GIVE_BACK)) return parse_give_back(p);
@@ -1153,6 +1232,24 @@ static ASTNode* parse_statement(Parser* p) {
 
     /* attempt ... otherwise */
     if (match_token(p, TOKEN_ATTEMPT)) return parse_attempt(p);
+
+    /* with expr as name: body */
+    if (match_token(p, TOKEN_WITH)) {
+        Token kw = p->previous;
+        ASTNode* expr = parse_expression(p);
+        char* bind_name = NULL;
+        if (match_token(p, TOKEN_AS)) {
+            Token name_tok = consume(p, TOKEN_IDENTIFIER, "Expected name after 'as'");
+            bind_name = token_text(name_tok);
+        }
+        consume(p, TOKEN_COLON, "Expected ':' after 'with' header");
+        ASTNode* body = parse_block(p);
+        ASTNode* node = ast_new_node(NODE_WITH, kw.line, kw.column);
+        node->as.with_stmt.expr = expr;
+        node->as.with_stmt.name = bind_name;
+        node->as.with_stmt.body = body;
+        return node;
+    }
 
     /* Expression statement (includes assignments) */
     ASTNode* expr = parse_expression_or_assign(p);

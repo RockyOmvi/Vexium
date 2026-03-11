@@ -1,0 +1,18 @@
+from ai use tensor_fill
+from ai use tensor_mean
+from ai use nn_new
+from ai use nn_add_dense
+from ai use nn_forward
+from ai use nn_train_step
+from ai use nn_free
+
+let x be tensor_fill([32, 784], 0.1)
+let y be tensor_fill([32, 1], 1.0)
+let model be nn_new("probe2")
+nn_add_dense(model, 1, "tanh")
+display "l1: " + str(nn_train_step(model, x, y, 16))
+display "l2: " + str(nn_train_step(model, x, y, 16))
+display "l3: " + str(nn_train_step(model, x, y, 16))
+let pred be nn_forward(model, x)
+display "m: " + str(tensor_mean(pred))
+display "free: " + str(nn_free(model))

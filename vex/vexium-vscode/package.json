@@ -2,8 +2,10 @@
   "name": "vexium-language",
   "displayName": "Vexium Language",
   "description": "Language support for Vexium programming language",
-  "version": "2.1.0",
+  "version": "2.3.1",
   "publisher": "vexium",
+  "icon": "icon.png",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.70.0"
   },
@@ -32,12 +34,19 @@
         "path": "./syntaxes/vexium.json"
       }
     ],
-    "configuration": {
-      "associations": {
-        "*.vxm": "vexium",
-        "*.vxmc": "vexium"
+    "snippets": [
+      {
+        "language": "vexium",
+        "path": "./snippets/vexium.json"
       }
-    }
+    ],
+    "iconThemes": [
+      {
+        "id": "vexium-icons",
+        "label": "Vexium File Icons",
+        "path": "./icons/vexium-icon-theme.json"
+      }
+    ]
   },
   "repository": {
     "type": "git",
@@ -46,5 +55,15 @@
   "keywords": [
     "vexium",
     "language"
+  ],
+  "files": [
+    "icon.png",
+    "language-configuration.json",
+    "syntaxes/**",
+    "snippets/**",
+    "icons/**",
+    "README.md",
+    "LICENSE.txt",
+    "package.json"
   ]
 }

@@ -1,0 +1,34 @@
+# Test *args (variadic parameters)
+
+display "=== Varargs Test ==="
+
+# Basic variadic: collect all args
+fn sum_all(*nums):
+    let total be 0
+    for n in nums:
+        total be total + n
+    give back total
+
+display sum_all(1, 2, 3)
+display sum_all(10, 20, 30, 40)
+display sum_all()
+
+# Mixed: fixed + variadic
+fn greet(name, *extras):
+    display "Hello, " + name + "!"
+    display "extras count: " + str(len(extras))
+    give back len(extras)
+
+greet("Alice")
+greet("Bob", "extra1", "extra2")
+
+# Variadic with two fixed params
+fn build(sep, first, *rest):
+    let result be first
+    for item in rest:
+        result be result + sep + item
+    give back result
+
+display build("-", "a", "b", "c", "d")
+
+display "=== Varargs PASS ==="

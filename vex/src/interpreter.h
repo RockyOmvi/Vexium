@@ -113,6 +113,7 @@ typedef enum {
     SIGNAL_BREAK,
     SIGNAL_SKIP,
     SIGNAL_RETURN,
+    SIGNAL_TAIL_CALL,
     SIGNAL_THROW,
     SIGNAL_YIELD
 } SignalType;
@@ -121,6 +122,8 @@ typedef struct {
     SignalType type;
     VexValue return_value;
     VexValue error_value;
+    VexValue* tail_args;
+    int tail_argc;
 } Signal;
 
 /* ══════════════════════════════════════════════════════════════
@@ -131,6 +134,14 @@ typedef struct {
     Environment* global_env;
     Signal signal;
     bool had_error;
+    ASTNode* active_fn_decl;
+    /* Debug / DAP support */
+    bool    debug_mode;
+    bool    debug_pause_next;   /* stop at next statement */
+    int     debug_last_line;    /* avoid re-stop on same line */
+    int     debug_bps[512];     /* breakpoint line numbers    */
+    int     debug_bp_count;
+    char    debug_src_file[512];/* source file path           */
 } Interpreter;
 
 /* ══════════════════════════════════════════════════════════════

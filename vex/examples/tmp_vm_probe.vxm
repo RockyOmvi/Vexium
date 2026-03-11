@@ -1,0 +1,19 @@
+from ai use tensor_fill
+from ai use tensor_mean
+from ai use nn_new
+from ai use nn_add_dense
+from ai use nn_forward
+from ai use nn_train_step
+from ai use nn_free
+
+let x be tensor_fill([4, 784], 0.1)
+let y be tensor_fill([4, 1], 1.0)
+let model be nn_new("probe")
+nn_add_dense(model, 1, "tanh")
+let pred0 be nn_forward(model, x)
+display "pre-mean: " + str(tensor_mean(pred0))
+let loss1 be nn_train_step(model, x, y, 4)
+display "loss1: " + str(loss1)
+let pred1 be nn_forward(model, x)
+display "post-mean: " + str(tensor_mean(pred1))
+display "free: " + str(nn_free(model))

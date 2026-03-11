@@ -23,7 +23,8 @@ typedef struct Environment Environment;
 /* ════════════════════════════════════════════════════════════════
  *  STANDARD LIBRARY MODULE SYSTEM
  *
- *  Modules: math, string, file, sys, time, json
+ *  Modules: math, string, file, sys, time, json, http,
+ *           collections, algo, data, gpu, ai
  *
  *  Usage in Vexium:
  *    use math           # loads all math functions

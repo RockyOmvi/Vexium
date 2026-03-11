@@ -1,0 +1,25 @@
+display "=== Slice Syntax ==="
+
+let arr be [0, 1, 2, 3, 4, 5]
+let s1 be arr[1:5]
+let s2 be arr[0:6:2]
+let s3 be arr[4:0:-2]
+
+display len(s1)
+display s1[0]
+display s1[3]
+
+display len(s2)
+display s2[1]
+display s2[2]
+
+display len(s3)
+display s3[0]
+display s3[1]
+
+let text be "abcdef"
+display text[1:5]
+display text[0:6:2]
+display text[4:0:-2]
+
+display "=== DONE ==="

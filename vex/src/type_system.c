@@ -199,8 +199,15 @@ void type_context_bind(TypeContext* ctx, const char* name, Type* type) {
         ctx->had_error = true;
         return;
     }
+    Type* stored_type = type_apply(type, ctx);
+    if (!stored_type) {
+        free(name_copy);
+        fprintf(stderr, "[Type System] Out of memory cloning bound type\n");
+        ctx->had_error = true;
+        return;
+    }
     ctx->bindings.names[ctx->bindings.count] = name_copy;
-    ctx->bindings.types[ctx->bindings.count] = type;
+    ctx->bindings.types[ctx->bindings.count] = stored_type;
     ctx->bindings.count++;
 }
 
@@ -329,19 +336,83 @@ Type* infer_binary(ASTNode* node, TypeContext* ctx) {
     VexiumTokenType op = node->as.binary.op;
     Type* left = infer_from_node(node->as.binary.left, ctx);
     Type* right = infer_from_node(node->as.binary.right, ctx);
+
+    if (!left || !right) return TYPE_DYNAMIC_SINGLETON;
+
+    if (left->kind == TYPE_DYNAMIC || right->kind == TYPE_DYNAMIC) {
+        return TYPE_DYNAMIC_SINGLETON;
+    }
     
     switch (op) {
-        /* Arithmetic: int+int=int, otherwise float */
+        /* Arithmetic */
         case TOKEN_PLUS:
-        case TOKEN_MINUS:
-        case TOKEN_STAR:
-            if (left->kind == TYPE_INT && right->kind == TYPE_INT) {
-                return TYPE_INT_SINGLETON;
+            if (left->kind == TYPE_STRING && right->kind == TYPE_STRING) {
+                return TYPE_STRING_SINGLETON;
             }
-            return TYPE_FLOAT_SINGLETON;
+            if (left->kind == TYPE_ARRAY && right->kind == TYPE_ARRAY) {
+                if (type_is_assignable(left, right)) return left;
+                if (type_is_assignable(right, left)) return right;
+                return type_create_array(TYPE_DYNAMIC_SINGLETON);
+            }
+            if ((left->kind == TYPE_INT || left->kind == TYPE_FLOAT) &&
+                (right->kind == TYPE_INT || right->kind == TYPE_FLOAT)) {
+                if (left->kind == TYPE_INT && right->kind == TYPE_INT) {
+                    return TYPE_INT_SINGLETON;
+                }
+                return TYPE_FLOAT_SINGLETON;
+            }
+            ctx->had_error = true;
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                     "Unsupported '+' operands: %s and %s",
+                     type_to_string(left), type_to_string(right));
+            return TYPE_DYNAMIC_SINGLETON;
+
+        case TOKEN_MINUS:
+            if ((left->kind == TYPE_INT || left->kind == TYPE_FLOAT) &&
+                (right->kind == TYPE_INT || right->kind == TYPE_FLOAT)) {
+                if (left->kind == TYPE_INT && right->kind == TYPE_INT) {
+                    return TYPE_INT_SINGLETON;
+                }
+                return TYPE_FLOAT_SINGLETON;
+            }
+            ctx->had_error = true;
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                     "Unsupported arithmetic operands: %s and %s",
+                     type_to_string(left), type_to_string(right));
+            return TYPE_DYNAMIC_SINGLETON;
+
+        case TOKEN_STAR:
+            if ((left->kind == TYPE_INT || left->kind == TYPE_FLOAT) &&
+                (right->kind == TYPE_INT || right->kind == TYPE_FLOAT)) {
+                if (left->kind == TYPE_INT && right->kind == TYPE_INT) {
+                    return TYPE_INT_SINGLETON;
+                }
+                return TYPE_FLOAT_SINGLETON;
+            }
+            if ((left->kind == TYPE_STRING && right->kind == TYPE_INT) ||
+                (left->kind == TYPE_INT && right->kind == TYPE_STRING)) {
+                return TYPE_STRING_SINGLETON;
+            }
+            if ((left->kind == TYPE_ARRAY && right->kind == TYPE_INT) ||
+                (left->kind == TYPE_INT && right->kind == TYPE_ARRAY)) {
+                return left->kind == TYPE_ARRAY ? left : right;
+            }
+            ctx->had_error = true;
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                     "Unsupported arithmetic operands: %s and %s",
+                     type_to_string(left), type_to_string(right));
+            return TYPE_DYNAMIC_SINGLETON;
             
         case TOKEN_SLASH:
         case TOKEN_POWER:
+            if (!((left->kind == TYPE_INT || left->kind == TYPE_FLOAT) &&
+                  (right->kind == TYPE_INT || right->kind == TYPE_FLOAT))) {
+                ctx->had_error = true;
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                         "Unsupported arithmetic operands: %s and %s",
+                         type_to_string(left), type_to_string(right));
+                return TYPE_DYNAMIC_SINGLETON;
+            }
             return TYPE_FLOAT_SINGLETON;
             
         /* Comparison: always bool */
@@ -391,17 +462,17 @@ Type* infer_identifier(ASTNode* node, TypeContext* ctx) {
     const char* name = node->as.identifier.name;
     Type* bound = type_context_lookup(ctx, name);
     if (bound) return bound;
-    
-    if (ctx->strict_mode) {
-        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                 "Unbound variable: %s", name);
-        ctx->had_error = true;
-    }
+
+    /* Unknown names may be builtins/module symbols resolved at runtime. */
     return TYPE_DYNAMIC_SINGLETON;
 }
 
 Type* infer_call(ASTNode* node, TypeContext* ctx) {
     Type* callee_type = infer_from_node(node->as.call.callee, ctx);
+
+    if (!callee_type || callee_type->kind == TYPE_DYNAMIC) {
+        return TYPE_DYNAMIC_SINGLETON;
+    }
     
     /* Create fresh type variable for result */
     Type* result_type = type_fresh_variable(ctx, "call");
@@ -498,6 +569,104 @@ Type* infer_from_node(ASTNode* node, TypeContext* ctx) {
             
         case NODE_FN_DECL:
             return infer_function(node, ctx);
+
+        case NODE_LET_DECL:
+        case NODE_CONST_DECL: {
+            Type* value_type = infer_from_node(node->as.var_decl.value, ctx);
+            Type* declared_type = NULL;
+            if (node->as.var_decl.type_name) {
+                declared_type = type_parse_string(node->as.var_decl.type_name, ctx);
+                if (!type_is_assignable(declared_type, value_type)) {
+                    ctx->had_error = true;
+                    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                             "Cannot assign %s to declared type %s for '%s'",
+                             type_to_string(value_type), type_to_string(declared_type),
+                             node->as.var_decl.name);
+                }
+                type_context_bind(ctx, node->as.var_decl.name, declared_type);
+                return declared_type;
+            }
+            type_context_bind(ctx, node->as.var_decl.name, value_type);
+            return value_type;
+        }
+
+        case NODE_ASSIGN: {
+            Type* value_type = infer_from_node(node->as.assign.value, ctx);
+            if (node->as.assign.target && node->as.assign.target->type == NODE_IDENTIFIER) {
+                const char* name = node->as.assign.target->as.identifier.name;
+                Type* target_type = type_context_lookup(ctx, name);
+                if (!target_type) {
+                    if (ctx->strict_mode) {
+                        ctx->had_error = true;
+                        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                                 "Assignment to undefined variable: %s", name);
+                    }
+                    return value_type;
+                }
+
+                if (node->as.assign.op == TOKEN_PLUS_ASSIGN) {
+                    if (target_type->kind == TYPE_DYNAMIC || value_type->kind == TYPE_DYNAMIC) {
+                        return target_type;
+                    }
+                    if (target_type->kind == TYPE_STRING && value_type->kind == TYPE_STRING) {
+                        return TYPE_STRING_SINGLETON;
+                    }
+                    if (target_type->kind == TYPE_ARRAY && value_type->kind == TYPE_ARRAY) {
+                        return target_type;
+                    }
+                    if ((target_type->kind == TYPE_INT || target_type->kind == TYPE_FLOAT) &&
+                        (value_type->kind == TYPE_INT || value_type->kind == TYPE_FLOAT)) {
+                        return (target_type->kind == TYPE_INT && value_type->kind == TYPE_INT)
+                            ? TYPE_INT_SINGLETON : TYPE_FLOAT_SINGLETON;
+                    }
+                }
+
+                if (node->as.assign.op == TOKEN_STAR_ASSIGN) {
+                    if (target_type->kind == TYPE_DYNAMIC || value_type->kind == TYPE_DYNAMIC) {
+                        return target_type;
+                    }
+                    if (target_type->kind == TYPE_STRING && value_type->kind == TYPE_INT) {
+                        return TYPE_STRING_SINGLETON;
+                    }
+                    if (target_type->kind == TYPE_ARRAY && value_type->kind == TYPE_INT) {
+                        return target_type;
+                    }
+                    if ((target_type->kind == TYPE_INT || target_type->kind == TYPE_FLOAT) &&
+                        (value_type->kind == TYPE_INT || value_type->kind == TYPE_FLOAT)) {
+                        return (target_type->kind == TYPE_INT && value_type->kind == TYPE_INT)
+                            ? TYPE_INT_SINGLETON : TYPE_FLOAT_SINGLETON;
+                    }
+                }
+
+                if (!type_is_assignable(target_type, value_type)) {
+                    ctx->had_error = true;
+                    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                             "Type mismatch assigning %s to %s for '%s'",
+                             type_to_string(value_type), type_to_string(target_type), name);
+                }
+                return target_type;
+            }
+            return value_type;
+        }
+
+        case NODE_EXPR_STMT:
+            return infer_from_node(node->as.expr_stmt.expr, ctx);
+
+        case NODE_BLOCK: {
+            Type* last = TYPE_NOTHING_SINGLETON;
+            for (int i = 0; i < node->as.block.statements.count; i++) {
+                last = infer_from_node(node->as.block.statements.items[i], ctx);
+            }
+            return last;
+        }
+
+        case NODE_PROGRAM: {
+            Type* last = TYPE_NOTHING_SINGLETON;
+            for (int i = 0; i < node->as.program.statements.count; i++) {
+                last = infer_from_node(node->as.program.statements.items[i], ctx);
+            }
+            return last;
+        }
             
         default:
             return TYPE_DYNAMIC_SINGLETON;
@@ -1090,7 +1259,7 @@ int vex_type_check(ASTNode* program) {
     
     /* Create type context for inference */
     TypeContext ctx;
-    type_context_init(&ctx, false);  /* Start with non-strict mode */
+    type_context_init(&ctx, true);  /* Enforce strict checking in compiler gate */
     
     /* Check for --strict flag via environment or default to false */
     /* For now, use gradual typing - errors are warnings unless strict */
@@ -1101,23 +1270,13 @@ int vex_type_check(ASTNode* program) {
     if (program->type == NODE_PROGRAM) {
         for (int i = 0; i < program->as.program.statements.count; i++) {
             ASTNode* stmt = program->as.program.statements.items[i];
-            Type* inferred = infer_from_node(stmt, &ctx);
+            infer_from_node(stmt, &ctx);
             
             if (ctx.had_error) {
                 fprintf(stderr, "[Type Error] %s at line %d\n", 
                         ctx.error_msg, stmt->line);
                 error_count++;
                 ctx.had_error = false;  /* Reset for next statement */
-            }
-            
-            /* Free the inferred type if it's not a singleton */
-            if (inferred && inferred != TYPE_NOTHING_SINGLETON &&
-                inferred != TYPE_DYNAMIC_SINGLETON &&
-                inferred != TYPE_INT_SINGLETON &&
-                inferred != TYPE_FLOAT_SINGLETON &&
-                inferred != TYPE_BOOL_SINGLETON &&
-                inferred != TYPE_STRING_SINGLETON) {
-                type_free(inferred);
             }
         }
     }

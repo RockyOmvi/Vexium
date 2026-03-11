@@ -1,0 +1,23 @@
+display "=== ONNX Smoke Test ==="
+
+from ai use nn_new
+from ai use nn_add_dense
+from ai use nn_onnx_export
+from ai use nn_onnx_import
+from ai use nn_free
+
+let m be nn_new("onnx_model")
+let ok1 be nn_add_dense(m, 8, "relu")
+let ok2 be nn_add_dense(m, 4, "tanh")
+display "layers added: " + str(ok1) + " " + str(ok2)
+
+let exported be nn_onnx_export(m, "tmp_model.onnx")
+display "export ok: " + str(exported)
+
+let m2 be nn_onnx_import("tmp_model.onnx")
+display "import handle > 0: " + str(m2 > 0)
+
+display "free m: " + str(nn_free(m))
+display "free m2: " + str(nn_free(m2))
+
+display "=== DONE ==="

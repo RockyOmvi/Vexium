@@ -167,6 +167,171 @@ char* vex_value_to_string(VexValue val) {
     return vex_strdup(buf, (int)strlen(buf));
 }
 
+/* Lightweight task-handle/channel helpers for interpreter async semantics. */
+static VexValue map_get_key(VexValue mapv, const char* key, bool* found) {
+    if (found) *found = false;
+    if (mapv.type != VAL_MAP || !mapv.as.map_val) return vex_nothing();
+    for (int i = 0; i < mapv.as.map_val->count; i++) {
+        if (strcmp(mapv.as.map_val->entries[i].key, key) == 0) {
+            if (found) *found = true;
+            return mapv.as.map_val->entries[i].value;
+        }
+    }
+    return vex_nothing();
+}
+
+static void map_set_key(VexValue mapv, const char* key, VexValue value) {
+    if (mapv.type != VAL_MAP || !mapv.as.map_val) return;
+
+    for (int i = 0; i < mapv.as.map_val->count; i++) {
+        if (strcmp(mapv.as.map_val->entries[i].key, key) == 0) {
+            mapv.as.map_val->entries[i].value = value;
+            return;
+        }
+    }
+
+    ValueMap* map = mapv.as.map_val;
+    if (map->count >= map->capacity) {
+        map->capacity = map->capacity == 0 ? 4 : map->capacity * 2;
+        map->entries = (ValueMapEntry*)realloc(map->entries, sizeof(ValueMapEntry) * map->capacity);
+    }
+    map->entries[map->count].key = vex_strdup(key, (int)strlen(key));
+    map->entries[map->count].value = value;
+    map->count++;
+}
+
+static VexValue make_task_handle(VexValue result) {
+    VexValue handle;
+    handle.type = VAL_MAP;
+    handle.as.map_val = (ValueMap*)calloc(1, sizeof(ValueMap));
+    map_set_key(handle, "__task_done", vex_bool(true));
+    map_set_key(handle, "__task_result", result);
+    return handle;
+}
+
+static bool is_task_handle(VexValue value) {
+    bool found = false;
+    VexValue done = map_get_key(value, "__task_done", &found);
+    return found && done.type == VAL_BOOL;
+}
+
+static VexValue make_channel_value(void) {
+    VexValue ch;
+    ch.type = VAL_MAP;
+    ch.as.map_val = (ValueMap*)calloc(1, sizeof(ValueMap));
+
+    VexValue queue;
+    queue.type = VAL_ARRAY;
+    queue.as.array_val = (ValueArray*)calloc(1, sizeof(ValueArray));
+
+    map_set_key(ch, "__channel", vex_bool(true));
+    map_set_key(ch, "queue", queue);
+    return ch;
+}
+
+static VexValue make_empty_array_value(void) {
+    VexValue out;
+    out.type = VAL_ARRAY;
+    out.as.array_val = (ValueArray*)calloc(1, sizeof(ValueArray));
+    return out;
+}
+
+static bool node_contains_yield(ASTNode* node) {
+    if (!node) return false;
+
+    switch (node->type) {
+        case NODE_YIELD:
+            return true;
+        case NODE_BINARY_OP:
+            return node_contains_yield(node->as.binary.left) || node_contains_yield(node->as.binary.right);
+        case NODE_UNARY_OP:
+            return node_contains_yield(node->as.unary.operand);
+        case NODE_CALL:
+            if (node_contains_yield(node->as.call.callee)) return true;
+            for (int i = 0; i < node->as.call.args.count; i++) {
+                if (node_contains_yield(node->as.call.args.items[i])) return true;
+            }
+            return false;
+        case NODE_INDEX:
+            return node_contains_yield(node->as.index_access.object) || node_contains_yield(node->as.index_access.index);
+        case NODE_FIELD_ACCESS:
+            return node_contains_yield(node->as.field_access.object);
+        case NODE_ARRAY_LITERAL:
+            for (int i = 0; i < node->as.array_literal.elements.count; i++) {
+                if (node_contains_yield(node->as.array_literal.elements.items[i])) return true;
+            }
+            return false;
+        case NODE_MAP_LITERAL:
+            for (int i = 0; i < node->as.map_literal.count; i++) {
+                if (node_contains_yield(node->as.map_literal.entries[i].key) ||
+                    node_contains_yield(node->as.map_literal.entries[i].value)) return true;
+            }
+            return false;
+        case NODE_ASSIGN:
+            return node_contains_yield(node->as.assign.target) || node_contains_yield(node->as.assign.value);
+        case NODE_LET_DECL:
+        case NODE_CONST_DECL:
+            return node_contains_yield(node->as.var_decl.value);
+        case NODE_EXPR_STMT:
+            return node_contains_yield(node->as.expr_stmt.expr);
+        case NODE_DISPLAY:
+            return node_contains_yield(node->as.display.value);
+        case NODE_IF:
+            return node_contains_yield(node->as.if_stmt.condition) ||
+                   node_contains_yield(node->as.if_stmt.then_block) ||
+                   node_contains_yield(node->as.if_stmt.else_block);
+        case NODE_WHILE:
+            return node_contains_yield(node->as.while_stmt.condition) || node_contains_yield(node->as.while_stmt.body);
+        case NODE_FOR_RANGE:
+            return node_contains_yield(node->as.for_range.start) || node_contains_yield(node->as.for_range.end) ||
+                   node_contains_yield(node->as.for_range.step) || node_contains_yield(node->as.for_range.body);
+        case NODE_FOR_EACH:
+            return node_contains_yield(node->as.for_each.iterable) || node_contains_yield(node->as.for_each.body);
+        case NODE_REPEAT:
+            return node_contains_yield(node->as.repeat.count) || node_contains_yield(node->as.repeat.body);
+        case NODE_GIVE_BACK:
+            return node_contains_yield(node->as.give_back.value);
+        case NODE_DEFER:
+            return node_contains_yield(node->as.defer.expr);
+        case NODE_AWAIT:
+            return node_contains_yield(node->as.await.expr);
+        case NODE_SPAWN:
+            if (node_contains_yield(node->as.spawn.function)) return true;
+            for (int i = 0; i < node->as.spawn.args.count; i++) {
+                if (node_contains_yield(node->as.spawn.args.items[i])) return true;
+            }
+            return false;
+        case NODE_LIST_COMP:
+            return node_contains_yield(node->as.list_comp.expr) ||
+                   node_contains_yield(node->as.list_comp.iterable) ||
+                   node_contains_yield(node->as.list_comp.condition);
+        case NODE_MATCH:
+            if (node_contains_yield(node->as.match_stmt.expr)) return true;
+            for (int i = 0; i < node->as.match_stmt.arms.count; i++) {
+                if (node_contains_yield(node->as.match_stmt.arms.items[i].pattern) ||
+                    node_contains_yield(node->as.match_stmt.arms.items[i].body)) return true;
+            }
+            return false;
+        case NODE_ATTEMPT:
+            return node_contains_yield(node->as.attempt.try_block) || node_contains_yield(node->as.attempt.catch_block);
+        case NODE_BLOCK:
+            for (int i = 0; i < node->as.block.statements.count; i++) {
+                if (node_contains_yield(node->as.block.statements.items[i])) return true;
+            }
+            return false;
+        case NODE_PROGRAM:
+            for (int i = 0; i < node->as.program.statements.count; i++) {
+                if (node_contains_yield(node->as.program.statements.items[i])) return true;
+            }
+            return false;
+        case NODE_FN_DECL:
+        case NODE_LAMBDA:
+            return false;
+        default:
+            return false;
+    }
+}
+
 /* ══════════════════════════════════════════════════════════════
  *  ENVIRONMENT
  * ══════════════════════════════════════════════════════════════ */
@@ -346,7 +511,10 @@ static bool is_stdlib_module_name(const char* module_name) {
            strcmp(module_name, "collections") == 0 ||
            strcmp(module_name, "algo") == 0 ||
            strcmp(module_name, "json") == 0 ||
-           strcmp(module_name, "http") == 0;
+           strcmp(module_name, "http") == 0 ||
+           strcmp(module_name, "gpu") == 0 ||
+           strcmp(module_name, "data") == 0 ||
+           strcmp(module_name, "ai") == 0;
 }
 
 /* throw(message) - Raise an exception */
@@ -380,6 +548,68 @@ static VexValue builtin_push(VexValue* args, int argc) {
     }
     arr->items[arr->count++] = args[1];
     return vex_nothing();
+}
+
+static VexValue builtin_slice(VexValue* args, int argc) {
+    if (argc < 1 || (args[0].type != VAL_ARRAY && args[0].type != VAL_STRING)) {
+        fprintf(stderr, "Error: slice() expects (array_or_string[, start[, end[, step]]])\n");
+        return vex_nothing();
+    }
+
+    int length = (args[0].type == VAL_ARRAY) ? args[0].as.array_val->count : args[0].as.string_val.length;
+    int start = 0;
+    int end = length;
+    int step = 1;
+
+    if (argc >= 2 && args[1].type == VAL_INT) start = (int)args[1].as.int_val;
+    if (argc >= 3 && args[2].type == VAL_INT) end = (int)args[2].as.int_val;
+    if (argc >= 4 && args[3].type == VAL_INT) step = (int)args[3].as.int_val;
+    if (step == 0) step = 1;
+
+    if (start < 0) start += length;
+    if (end < 0) end += length;
+
+    if (step > 0) {
+        if (start < 0) start = 0;
+        if (start > length) start = length;
+        if (end < 0) end = 0;
+        if (end > length) end = length;
+    } else {
+        if (start < -1) start = -1;
+        if (start >= length) start = length - 1;
+        if (end < -1) end = -1;
+        if (end >= length) end = length - 1;
+    }
+
+    if (args[0].type == VAL_ARRAY) {
+        VexValue result = make_empty_array_value();
+        if (step > 0) {
+            for (int i = start; i < end; i += step) {
+                builtin_push((VexValue[]){ result, args[0].as.array_val->items[i] }, 2);
+            }
+        } else {
+            for (int i = start; i > end; i += step) {
+                builtin_push((VexValue[]){ result, args[0].as.array_val->items[i] }, 2);
+            }
+        }
+        return result;
+    }
+
+    char* buf = (char*)malloc((size_t)length + 1);
+    int out = 0;
+    if (step > 0) {
+        for (int i = start; i < end; i += step) {
+            buf[out++] = args[0].as.string_val.data[i];
+        }
+    } else {
+        for (int i = start; i > end; i += step) {
+            buf[out++] = args[0].as.string_val.data[i];
+        }
+    }
+    buf[out] = '\0';
+    VexValue result = vex_string(buf, out);
+    free(buf);
+    return result;
 }
 
 static VexValue builtin_pop(VexValue* args, int argc) {
@@ -581,6 +811,118 @@ static VexValue builtin_index_of(VexValue* args, int argc) {
 
 static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env);
 
+/* ══════════════════════════════════════════════════════════════
+ *  DEBUG / DAP SUPPORT
+ * ══════════════════════════════════════════════════════════════ */
+
+static bool debug_is_statement(NodeType t) {
+    switch (t) {
+        case NODE_LET_DECL: case NODE_CONST_DECL: case NODE_ASSIGN:
+        case NODE_EXPR_STMT: case NODE_DISPLAY:   case NODE_IF:
+        case NODE_WHILE:    case NODE_FOR_RANGE:  case NODE_FOR_EACH:
+        case NODE_REPEAT:   case NODE_GIVE_BACK:  case NODE_DEFER:
+        case NODE_BREAK:    case NODE_SKIP:       case NODE_ATTEMPT:
+        case NODE_PASS:     case NODE_MATCH:      case NODE_WITH:
+        case NODE_SPAWN:    case NODE_USE:        case NODE_FROM_USE:
+        case NODE_STRUCT_DECL: case NODE_FN_DECL: case NODE_TRAIT:
+        case NODE_IMPL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void debug_dump_vars(Environment* env) {
+    fprintf(stderr, "DBG:VARS:[");
+    bool first = true;
+    for (Environment* e = env; e != NULL; e = e->parent) {
+        for (int i = 0; i < e->count; i++) {
+            EnvEntry* entry = &e->entries[i];
+            if (!first) fprintf(stderr, ",");
+            first = false;
+            char* vs = vex_value_to_string(entry->value);
+            fprintf(stderr, "{\"name\":\"");
+            for (const char* p = entry->name; *p; p++) {
+                if (*p == '"')      fprintf(stderr, "\\\"");
+                else if (*p == '\\') fprintf(stderr, "\\\\");
+                else                fprintf(stderr, "%c", *p);
+            }
+            fprintf(stderr, "\",\"value\":\"");
+            for (const char* p = vs; *p; p++) {
+                if (*p == '"')      fprintf(stderr, "\\\"");
+                else if (*p == '\\') fprintf(stderr, "\\\\");
+                else if (*p == '\n') fprintf(stderr, "\\n");
+                else if (*p == '\r') fprintf(stderr, "\\r");
+                else                fprintf(stderr, "%c", *p);
+            }
+            fprintf(stderr, "\",\"type\":\"%s\"}", vex_type_name(entry->value));
+            free(vs);
+        }
+    }
+    fprintf(stderr, "]\n");
+    fflush(stderr);
+}
+
+static void debug_hook(Interpreter* interp, ASTNode* node, Environment* env) {
+    if (!debug_is_statement(node->type)) return;
+    if (node->line <= 0) return;
+
+    bool should_pause = false;
+    if (interp->debug_pause_next && node->line != interp->debug_last_line)
+        should_pause = true;
+    for (int i = 0; !should_pause && i < interp->debug_bp_count; i++)
+        if (interp->debug_bps[i] == node->line && node->line != interp->debug_last_line)
+            should_pause = true;
+
+    if (!should_pause) return;
+
+    interp->debug_last_line  = node->line;
+    interp->debug_pause_next = false;
+
+    /* Emit STOP + VARS using | as separator so Windows paths are safe */
+    fprintf(stderr, "DBG:STOP:%d|%d|%s\n", node->line, node->column,
+            interp->debug_src_file);
+    fflush(stderr);
+    debug_dump_vars(env);
+
+    /* Wait for a command on stdin */
+    char cmd[128];
+    while (1) {
+        if (!fgets(cmd, sizeof(cmd), stdin)) {
+            interp->signal.type = SIGNAL_THROW; return;
+        }
+        int len = (int)strlen(cmd);
+        while (len > 0 && (cmd[len-1] == '\n' || cmd[len-1] == '\r')) cmd[--len] = '\0';
+
+        if      (strcmp(cmd, "c") == 0) { interp->debug_pause_next = false; break; }
+        else if (strcmp(cmd, "n") == 0) { interp->debug_pause_next = true;  break; }
+        else if (strcmp(cmd, "s") == 0) { interp->debug_pause_next = true;  break; }
+        else if (strcmp(cmd, "o") == 0) { interp->debug_pause_next = false; break; }
+        else if (strcmp(cmd, "q") == 0) { interp->signal.type = SIGNAL_THROW; return; }
+        else if (strncmp(cmd, "b ", 2) == 0) {
+            int ln = atoi(cmd + 2);
+            if (ln > 0 && interp->debug_bp_count < 512)
+                interp->debug_bps[interp->debug_bp_count++] = ln;
+            /* Re-emit so adapter sees we're still paused */
+            fprintf(stderr, "DBG:STOP:%d|%d|%s\n", node->line, node->column,
+                    interp->debug_src_file);
+            fflush(stderr);
+            debug_dump_vars(env);
+        } else if (strncmp(cmd, "rb ", 3) == 0) {
+            int ln = atoi(cmd + 3);
+            for (int i = 0; i < interp->debug_bp_count; i++)
+                if (interp->debug_bps[i] == ln) {
+                    interp->debug_bps[i] = interp->debug_bps[--interp->debug_bp_count];
+                    break;
+                }
+            fprintf(stderr, "DBG:STOP:%d|%d|%s\n", node->line, node->column,
+                    interp->debug_src_file);
+            fflush(stderr);
+            debug_dump_vars(env);
+        }
+    }
+}
+
 static bool eval_interpolated_expr(Interpreter* interp, const char* expr, Environment* env, VexValue* out) {
     if (!expr || !*expr || !out) return false;
 
@@ -732,6 +1074,40 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env);
 static VexValue eval_method_call(Interpreter* interp, InstanceValue* inst,
     const char* method_name, VexValue* args, int argc, Environment* env);
 
+static Environment* create_fn_env(Interpreter* interp, ASTNode* fn, Environment* closure,
+                                  VexValue* args, int argc, Environment* call_env) {
+    Environment* fn_env = env_new(closure);
+    int param_count = fn->as.fn_decl.params.count;
+    bool has_variadic = (param_count > 0 &&
+                         fn->as.fn_decl.params.items[param_count - 1].is_variadic);
+    int fixed_count = has_variadic ? param_count - 1 : param_count;
+
+    for (int i = 0; i < fixed_count; i++) {
+        if (i < argc) {
+            env_define(fn_env, fn->as.fn_decl.params.items[i].name, args[i], false);
+        } else if (fn->as.fn_decl.params.items[i].default_value) {
+            VexValue def = eval(interp, fn->as.fn_decl.params.items[i].default_value, call_env);
+            env_define(fn_env, fn->as.fn_decl.params.items[i].name, def, false);
+        } else {
+            env_define(fn_env, fn->as.fn_decl.params.items[i].name, vex_nothing(), false);
+        }
+    }
+
+    if (has_variadic) {
+        VexValue rest = make_empty_array_value();
+        for (int i = fixed_count; i < argc; i++) {
+            VexValue push_args[2] = { rest, args[i] };
+            builtin_push(push_args, 2);
+        }
+        env_define(fn_env, fn->as.fn_decl.params.items[fixed_count].name, rest, false);
+    }
+
+    if (node_contains_yield(fn->as.fn_decl.body)) {
+        env_define(fn_env, "__yield__", make_empty_array_value(), false);
+    }
+    return fn_env;
+}
+
 /* ── Number coercion helpers ── */
 static double to_double(VexValue v) {
     if (v.type == VAL_INT) return (double)v.as.int_val;
@@ -744,6 +1120,73 @@ static bool is_numeric(VexValue v) {
 }
 
 /* ── Binary operation ── */
+static VexValue concat_arrays(ValueArray* left, ValueArray* right) {
+    VexValue result = vex_nothing();
+    result.type = VAL_ARRAY;
+    result.as.array_val = (ValueArray*)calloc(1, sizeof(ValueArray));
+    if (!result.as.array_val) return vex_nothing();
+
+    int left_count = left ? left->count : 0;
+    int right_count = right ? right->count : 0;
+    int total = left_count + right_count;
+    result.as.array_val->capacity = total > 0 ? total : 8;
+    result.as.array_val->items = (VexValue*)malloc(sizeof(VexValue) * result.as.array_val->capacity);
+    if (!result.as.array_val->items) {
+        free(result.as.array_val);
+        return vex_nothing();
+    }
+
+    for (int i = 0; i < left_count; i++) result.as.array_val->items[result.as.array_val->count++] = left->items[i];
+    for (int i = 0; i < right_count; i++) result.as.array_val->items[result.as.array_val->count++] = right->items[i];
+    return result;
+}
+
+static VexValue repeat_array(ValueArray* src, int repeat) {
+    VexValue result = vex_nothing();
+    result.type = VAL_ARRAY;
+    result.as.array_val = (ValueArray*)calloc(1, sizeof(ValueArray));
+    if (!result.as.array_val) return vex_nothing();
+
+    int src_count = src ? src->count : 0;
+    if (repeat <= 0 || src_count == 0) {
+        result.as.array_val->capacity = 8;
+        result.as.array_val->items = NULL;
+        return result;
+    }
+
+    int total = src_count * repeat;
+    result.as.array_val->capacity = total;
+    result.as.array_val->items = (VexValue*)malloc(sizeof(VexValue) * total);
+    if (!result.as.array_val->items) {
+        free(result.as.array_val);
+        return vex_nothing();
+    }
+
+    for (int i = 0; i < repeat; i++) {
+        for (int j = 0; j < src_count; j++) {
+            result.as.array_val->items[result.as.array_val->count++] = src->items[j];
+        }
+    }
+    return result;
+}
+
+static VexValue repeat_string_value(VexValue str_val, int repeat) {
+    if (repeat <= 0) return vex_string("", 0);
+
+    int new_len = str_val.as.string_val.length * repeat;
+    char* buf = (char*)malloc(new_len + 1);
+    if (!buf) return vex_nothing();
+
+    for (int i = 0; i < repeat; i++) {
+        memcpy(buf + i * str_val.as.string_val.length, str_val.as.string_val.data, str_val.as.string_val.length);
+    }
+    buf[new_len] = '\0';
+
+    VexValue result = vex_string(buf, new_len);
+    free(buf);
+    return result;
+}
+
 static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env) {
     VexValue left = eval(interp, node->as.binary.left, env);
     VexValue right = eval(interp, node->as.binary.right, env);
@@ -761,17 +1204,22 @@ static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env
         return result;
     }
 
+    if (op == TOKEN_PLUS && left.type == VAL_ARRAY && right.type == VAL_ARRAY) {
+        return concat_arrays(left.as.array_val, right.as.array_val);
+    }
+
     /* String repetition: "ha" * 3 = "hahaha" */
     if (op == TOKEN_STAR && left.type == VAL_STRING && right.type == VAL_INT) {
-        int rep = (int)right.as.int_val;
-        int new_len = left.as.string_val.length * rep;
-        char* buf = (char*)malloc(new_len + 1);
-        for (int i = 0; i < rep; i++)
-            memcpy(buf + i * left.as.string_val.length, left.as.string_val.data, left.as.string_val.length);
-        buf[new_len] = '\0';
-        VexValue result = vex_string(buf, new_len);
-        free(buf);
-        return result;
+        return repeat_string_value(left, (int)right.as.int_val);
+    }
+    if (op == TOKEN_STAR && left.type == VAL_INT && right.type == VAL_STRING) {
+        return repeat_string_value(right, (int)left.as.int_val);
+    }
+    if (op == TOKEN_STAR && left.type == VAL_ARRAY && right.type == VAL_INT) {
+        return repeat_array(left.as.array_val, (int)right.as.int_val);
+    }
+    if (op == TOKEN_STAR && left.type == VAL_INT && right.type == VAL_ARRAY) {
+        return repeat_array(right.as.array_val, (int)left.as.int_val);
     }
 
     /* Numeric ops */
@@ -1000,35 +1448,47 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
     }
     else if (callee.type == VAL_FN) {
         ASTNode* fn = callee.as.fn_val.decl;
-        Environment* fn_env = env_new(callee.as.fn_val.closure);
+        ASTNode* prev_active_fn = interp->active_fn_decl;
+        bool is_generator = node_contains_yield(fn->as.fn_decl.body);
+        interp->active_fn_decl = fn;
 
-        /* Bind parameters (with default value support) */
-        int param_count = fn->as.fn_decl.params.count;
-        for (int i = 0; i < param_count; i++) {
-            if (i < argc) {
-                env_define(fn_env, fn->as.fn_decl.params.items[i].name, args[i], false);
-            } else if (fn->as.fn_decl.params.items[i].default_value) {
-                VexValue def = eval(interp, fn->as.fn_decl.params.items[i].default_value, env);
-                env_define(fn_env, fn->as.fn_decl.params.items[i].name, def, false);
-            } else {
-                env_define(fn_env, fn->as.fn_decl.params.items[i].name, vex_nothing(), false);
+        Environment* fn_env = create_fn_env(interp, fn, callee.as.fn_val.closure, args, argc, env);
+        for (;;) {
+            result = eval(interp, fn->as.fn_decl.body, fn_env);
+
+            if (interp->signal.type == SIGNAL_RETURN) {
+                result = interp->signal.return_value;
+                interp->signal.type = SIGNAL_NONE;
+                break;
             }
+
+            if (interp->signal.type == SIGNAL_TAIL_CALL) {
+                VexValue* tail_args = interp->signal.tail_args;
+                int tail_argc = interp->signal.tail_argc;
+                interp->signal.type = SIGNAL_NONE;
+                interp->signal.tail_args = NULL;
+                interp->signal.tail_argc = 0;
+
+                env_release(fn_env);
+                fn_env = create_fn_env(interp, fn, callee.as.fn_val.closure, tail_args, tail_argc, env);
+                free(tail_args);
+                continue;
+            }
+
+            if (interp->signal.type == SIGNAL_THROW) {
+                interp->signal.type = SIGNAL_NONE;
+                break;
+            }
+            break;
         }
 
-        /* Execute body */
-        result = eval(interp, fn->as.fn_decl.body, fn_env);
-
-        if (interp->signal.type == SIGNAL_RETURN) {
-            result = interp->signal.return_value;
-            interp->signal.type = SIGNAL_NONE;
-        }
-        /* Handle throw signal - propagate error */
-        if (interp->signal.type == SIGNAL_THROW) {
-            interp->signal.type = SIGNAL_NONE;
-            return result;
+        if (is_generator) {
+            VexValue* collector = env_get(fn_env, "__yield__");
+            if (collector) result = *collector;
         }
 
         env_release(fn_env);
+        interp->active_fn_decl = prev_active_fn;
     }
     else if (callee.type == VAL_STRUCT_DEF) {
         /* Struct constructor — create instance */
@@ -1120,6 +1580,24 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
     return result;
 }
 
+/* ── Check if a struct instance has a named method ── */
+static bool instance_has_method(Interpreter* interp, InstanceValue* inst,
+                                const char* method_name) {
+    ASTNode* sd = inst->decl;
+    while (sd) {
+        for (int i = 0; i < sd->as.struct_decl.method_count; i++) {
+            if (strcmp(sd->as.struct_decl.methods[i].name, method_name) == 0) return true;
+        }
+        if (sd->as.struct_decl.parent_count > 0) {
+            VexValue* p = env_get(interp->global_env,
+                                  sd->as.struct_decl.parent_names[0]);
+            if (p && p->type == VAL_STRUCT_DEF) { sd = p->as.struct_def.decl; continue; }
+        }
+        break;
+    }
+    return false;
+}
+
 /* ── Method call on an instance ── */
 static VexValue eval_method_call(Interpreter* interp, InstanceValue* inst,
     const char* method_name, VexValue* args, int argc, Environment* env) {
@@ -1188,6 +1666,12 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
     if (node == NULL) return vex_nothing();
     if (interp->signal.type != SIGNAL_NONE) return vex_nothing();
 
+    /* ── Debug hook ── */
+    if (interp->debug_mode) {
+        debug_hook(interp, node, env);
+        if (interp->signal.type != SIGNAL_NONE) return vex_nothing();
+    }
+
     switch (node->type) {
         /* ── Literals ── */
         case NODE_INT_LITERAL:
@@ -1244,6 +1728,19 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
         /* ── Index ── */
         case NODE_INDEX: {
             VexValue obj = eval(interp, node->as.index_access.object, env);
+            if (node->as.index_access.is_slice) {
+                VexValue* slice_fn = env_get(env, "slice");
+                if (slice_fn && slice_fn->type == VAL_BUILTIN_FN) {
+                    VexValue slice_args[4];
+                    slice_args[0] = obj;
+                    slice_args[1] = node->as.index_access.index ? eval(interp, node->as.index_access.index, env) : vex_nothing();
+                    slice_args[2] = node->as.index_access.end ? eval(interp, node->as.index_access.end, env) : vex_nothing();
+                    slice_args[3] = node->as.index_access.step ? eval(interp, node->as.index_access.step, env) : vex_nothing();
+                    return slice_fn->as.builtin_fn.func(slice_args, 4);
+                }
+                fprintf(stderr, "Error [line %d]: slice() is not available\n", node->line);
+                return vex_nothing();
+            }
             VexValue idx = eval(interp, node->as.index_access.index, env);
             if (obj.type == VAL_ARRAY && idx.type == VAL_INT) {
                 int i = (int)idx.as.int_val;
@@ -1385,7 +1882,12 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
                         buf[new_len] = '\0';
                         new_val = vex_string(buf, new_len);
                         free(buf);
-                    }
+                    } else if (op == TOKEN_PLUS_ASSIGN && current->type == VAL_ARRAY && value.type == VAL_ARRAY)
+                        new_val = concat_arrays(current->as.array_val, value.as.array_val);
+                    else if (op == TOKEN_STAR_ASSIGN && current->type == VAL_STRING && value.type == VAL_INT)
+                        new_val = repeat_string_value(*current, (int)value.as.int_val);
+                    else if (op == TOKEN_STAR_ASSIGN && current->type == VAL_ARRAY && value.type == VAL_INT)
+                        new_val = repeat_array(current->as.array_val, (int)value.as.int_val);
                     env_set(env, name, new_val);
                 }
             }
@@ -1589,8 +2091,27 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
         /* ── Give back (return) ── */
         case NODE_GIVE_BACK: {
             VexValue val = vex_nothing();
-            if (node->as.give_back.value)
-                val = eval(interp, node->as.give_back.value, env);
+            if (node->as.give_back.value) {
+                ASTNode* rv = node->as.give_back.value;
+                if (rv->type == NODE_CALL && interp->active_fn_decl != NULL) {
+                    VexValue callee = eval(interp, rv->as.call.callee, env);
+                    if (callee.type == VAL_FN && callee.as.fn_val.decl == interp->active_fn_decl) {
+                        int argc = rv->as.call.args.count;
+                        VexValue* tail_args = NULL;
+                        if (argc > 0) {
+                            tail_args = (VexValue*)malloc(sizeof(VexValue) * argc);
+                            for (int i = 0; i < argc; i++) {
+                                tail_args[i] = eval(interp, rv->as.call.args.items[i], env);
+                            }
+                        }
+                        interp->signal.type = SIGNAL_TAIL_CALL;
+                        interp->signal.tail_args = tail_args;
+                        interp->signal.tail_argc = argc;
+                        return vex_nothing();
+                    }
+                }
+                val = eval(interp, rv, env);
+            }
             interp->signal.type = SIGNAL_RETURN;
             interp->signal.return_value = val;
             return val;
@@ -1615,15 +2136,36 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
 
         /* ── Await expression ── */
         case NODE_AWAIT: {
-            /* Evaluate the awaited expression (no real async support) */
-            return eval(interp, node->as.await.expr, env);
+            VexValue awaited = eval(interp, node->as.await.expr, env);
+            if (is_task_handle(awaited)) {
+                bool found = false;
+                VexValue result = map_get_key(awaited, "__task_result", &found);
+                return found ? result : vex_nothing();
+            }
+            return awaited;
+        }
+
+        /* ── Spawn expression ── */
+        case NODE_SPAWN: {
+            /* Interpreter currently executes spawned work eagerly but returns awaitable handle. */
+            VexValue result = eval(interp, node->as.spawn.function, env);
+            return make_task_handle(result);
+        }
+
+        /* ── Channel create expression ── */
+        case NODE_CHANNEL_CREATE: {
+            return make_channel_value();
         }
 
         /* ── Yield expression ── */
         case NODE_YIELD: {
-            /* Yield parsing exists, but generator suspension isn't implemented.
-             * Evaluate and return expression to avoid unhandled-node errors. */
-            return eval(interp, node->as.yield.expr, env);
+            VexValue yielded = node->as.yield.expr ? eval(interp, node->as.yield.expr, env) : vex_nothing();
+            VexValue* collector = env_get(env, "__yield__");
+            if (collector && collector->type == VAL_ARRAY) {
+                VexValue push_args[2] = { *collector, yielded };
+                builtin_push(push_args, 2);
+            }
+            return vex_nothing();
         }
 
         /* ── Trait declaration ── */
@@ -1901,6 +2443,47 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
         case NODE_EXPR_STMT:
             return eval(interp, node->as.expr_stmt.expr, env);
 
+        /* ── With statement: with expr as name { body } ── */
+        case NODE_WITH: {
+            VexValue ctx = eval(interp, node->as.with_stmt.expr, env);
+            if (interp->signal.type != SIGNAL_NONE) return vex_nothing();
+
+            /* Call .enter() if context is an instance that has it */
+            VexValue entered = ctx;
+            if (ctx.type == VAL_INSTANCE) {
+                InstanceValue* inst = ctx.as.instance_val;
+                if (instance_has_method(interp, inst, "enter")) {
+                    entered = eval_method_call(interp, inst, "enter", NULL, 0, env);
+                    if (interp->signal.type == SIGNAL_RETURN) {
+                        entered = interp->signal.return_value;
+                        interp->signal.type = SIGNAL_NONE;
+                    }
+                }
+            }
+
+            /* Execute body in a new scope with name bound */
+            Environment* body_env = env_new(env);
+            if (node->as.with_stmt.name) {
+                env_define(body_env, node->as.with_stmt.name, entered, false);
+            }
+            eval(interp, node->as.with_stmt.body, body_env);
+
+            /* Call .exit() on context (save/restore any control-flow signal) */
+            if (ctx.type == VAL_INSTANCE) {
+                InstanceValue* inst = ctx.as.instance_val;
+                if (instance_has_method(interp, inst, "exit")) {
+                    Signal saved = interp->signal;
+                    interp->signal.type = SIGNAL_NONE;
+                    interp->signal.tail_args = NULL;
+                    eval_method_call(interp, inst, "exit", NULL, 0, env);
+                    interp->signal = saved;
+                }
+            }
+
+            env_release(body_env);
+            return vex_nothing();
+        }
+
         default:
             fprintf(stderr, "Error [line %d]: Unhandled node type %d\n",
                 node->line, node->type);
@@ -1915,7 +2498,10 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
 void interpreter_init(Interpreter* interp) {
     interp->global_env = env_new(NULL);
     interp->signal.type = SIGNAL_NONE;
+    interp->signal.tail_args = NULL;
+    interp->signal.tail_argc = 0;
     interp->had_error = false;
+    interp->active_fn_decl = NULL;
     g_interpreter = interp;
 
     /* Register built-in functions */
@@ -1944,6 +2530,9 @@ void interpreter_init(Interpreter* interp) {
 
     v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_push; v.as.builtin_fn.name = "push";
     env_define(interp->global_env, "push", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_slice; v.as.builtin_fn.name = "slice";
+    env_define(interp->global_env, "slice", v, true);
 
     v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_pop; v.as.builtin_fn.name = "pop";
     env_define(interp->global_env, "pop", v, true);

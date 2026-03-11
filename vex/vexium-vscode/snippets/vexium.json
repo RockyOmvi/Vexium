@@ -1,0 +1,301 @@
+{
+  "Variable Declaration": {
+    "prefix": "let",
+    "body": ["let ${1:name} be ${2:value}"],
+    "description": "Declare a variable"
+  },
+  "Constant Declaration": {
+    "prefix": "const",
+    "body": ["const ${1:NAME} be ${2:value}"],
+    "description": "Declare a constant"
+  },
+  "Function Definition": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2:params}):",
+      "    ${0:pass}"
+    ],
+    "description": "Define a function"
+  },
+  "Function with return type": {
+    "prefix": "fnr",
+    "body": [
+      "fn ${1:name}(${2:params}) -> ${3:type}:",
+      "    ${0:pass}"
+    ],
+    "description": "Define a typed function"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": [
+      "if ${1:condition}:",
+      "    ${0:pass}"
+    ],
+    "description": "If statement"
+  },
+  "If-Else Statement": {
+    "prefix": "ifelse",
+    "body": [
+      "if ${1:condition}:",
+      "    ${2:pass}",
+      "else:",
+      "    ${0:pass}"
+    ],
+    "description": "If-else statement"
+  },
+  "If-Elif-Else Statement": {
+    "prefix": "ifelifelse",
+    "body": [
+      "if ${1:condition}:",
+      "    ${2:pass}",
+      "elif ${3:condition}:",
+      "    ${4:pass}",
+      "else:",
+      "    ${0:pass}"
+    ],
+    "description": "If-elif-else statement"
+  },
+  "While Loop": {
+    "prefix": "while",
+    "body": [
+      "while ${1:condition}:",
+      "    ${0:pass}"
+    ],
+    "description": "While loop"
+  },
+  "For Loop": {
+    "prefix": "for",
+    "body": [
+      "for ${1:i} in range(${2:n}):",
+      "    ${0:pass}"
+    ],
+    "description": "For loop with range"
+  },
+  "For Each Loop": {
+    "prefix": "foreach",
+    "body": [
+      "for each ${1:item} in ${2:collection}:",
+      "    ${0:pass}"
+    ],
+    "description": "For-each loop"
+  },
+  "Repeat Times Loop": {
+    "prefix": "repeat",
+    "body": [
+      "repeat ${1:n} times:",
+      "    ${0:pass}"
+    ],
+    "description": "Repeat N times loop"
+  },
+  "Match Statement": {
+    "prefix": "match",
+    "body": [
+      "match ${1:value}:",
+      "    when ${2:case1}:",
+      "        ${3:pass}",
+      "    when ${4:case2}:",
+      "        ${5:pass}",
+      "    else:",
+      "        ${0:pass}"
+    ],
+    "description": "Match-when statement"
+  },
+  "Struct Definition": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name}:",
+      "    has ${2:field}: ${3:type}",
+      "",
+      "    can ${4:method}(self):",
+      "        ${0:pass}"
+    ],
+    "description": "Define a struct"
+  },
+  "Method Definition": {
+    "prefix": "can",
+    "body": [
+      "can ${1:method_name}(self${2:, params}):",
+      "    ${0:pass}"
+    ],
+    "description": "Define a struct method"
+  },
+  "Attempt-Otherwise (try-catch)": {
+    "prefix": "attempt",
+    "body": [
+      "attempt:",
+      "    ${1:pass}",
+      "otherwise ${2:err}:",
+      "    ${0:pass}"
+    ],
+    "description": "Attempt-otherwise error handling"
+  },
+  "Attempt-Otherwise-Finally": {
+    "prefix": "attemptfin",
+    "body": [
+      "attempt:",
+      "    ${1:pass}",
+      "otherwise ${2:err}:",
+      "    ${3:pass}",
+      "always:",
+      "    ${0:pass}"
+    ],
+    "description": "Attempt-otherwise-always error handling"
+  },
+  "Give Back (return)": {
+    "prefix": "giveback",
+    "body": ["give back ${0:value}"],
+    "description": "Return a value"
+  },
+  "Display": {
+    "prefix": "display",
+    "body": ["display ${1:\"${2:message}\"}"],
+    "description": "Print to stdout"
+  },
+  "Display Variable": {
+    "prefix": "displayv",
+    "body": ["display str(${1:value})"],
+    "description": "Print a variable as string"
+  },
+  "From Module Import": {
+    "prefix": "from",
+    "body": ["from ${1:module} use ${0:symbol}"],
+    "description": "Import a symbol from a module"
+  },
+  "From AI Module": {
+    "prefix": "fromai",
+    "body": [
+      "from ai use tensor_zeros",
+      "from ai use tensor_rand",
+      "from ai use tensor_ones",
+      "from ai use tensor_from_array",
+      "from ai use tensor_to_array",
+      "from ai use tensor_matmul",
+      "from ai use tensor_free",
+      "from ai use nn_new",
+      "from ai use nn_add_dense",
+      "from ai use nn_predict",
+      "from ai use nn_train_step",
+      "from ai use nn_save",
+      "from ai use nn_load",
+      "from ai use nn_free",
+      "from ai use reset"
+    ],
+    "description": "Import common AI module symbols"
+  },
+  "From Math Module": {
+    "prefix": "frommath",
+    "body": [
+      "from math use sqrt",
+      "from math use abs",
+      "from math use pow",
+      "from math use min",
+      "from math use max"
+    ],
+    "description": "Import common math functions"
+  },
+  "From JSON Module": {
+    "prefix": "fromjson",
+    "body": [
+      "from json use parse",
+      "from json use stringify"
+    ],
+    "description": "Import JSON functions"
+  },
+  "From Time Module": {
+    "prefix": "fromtime",
+    "body": [
+      "from time use now",
+      "from time use clock",
+      "from time use sleep"
+    ],
+    "description": "Import time functions"
+  },
+  "New Neural Network": {
+    "prefix": "nnnew",
+    "body": [
+      "let ${1:model} be nn_new(\"${2:name}\")",
+      "nn_add_dense(${1}, ${3:units}, \"${4|relu,sigmoid,tanh,softmax|}\", ${5:in_size})",
+      "nn_add_dense(${1}, ${6:out_units}, \"${7|tanh,sigmoid,softmax|}\")"
+    ],
+    "description": "Create a new neural network model"
+  },
+  "Train Step": {
+    "prefix": "nntrain",
+    "body": [
+      "let ${1:loss} be nn_train_step(${2:model}, ${3:x}, ${4:y}, ${5:batch_size})",
+      "display \"loss: \" + str(${1})"
+    ],
+    "description": "Run one training step"
+  },
+  "Predict": {
+    "prefix": "nnpredict",
+    "body": [
+      "let ${1:pred} be nn_predict(${2:model}, ${3:input})",
+      "let ${4:result} be tensor_to_array(${1})",
+      "tensor_free(${1})"
+    ],
+    "description": "Run model prediction"
+  },
+  "Tensor from Array": {
+    "prefix": "tensor",
+    "body": ["let ${1:t} be tensor_from_array(${2:array})"],
+    "description": "Create tensor from array"
+  },
+  "Training Loop": {
+    "prefix": "trainloop",
+    "body": [
+      "let ${1:epochs} be ${2:100}",
+      "let ${3:e} be 0",
+      "while ${3} < ${1}:",
+      "    let ${4:loss} be nn_train_step(${5:model}, ${6:x}, ${7:y}, ${8:32})",
+      "    ${3} be ${3} + 1",
+      "display \"Final loss: \" + str(${4})"
+    ],
+    "description": "Training loop with epoch counter"
+  },
+  "Spawn Task": {
+    "prefix": "spawn",
+    "body": ["spawn ${0:function_call}"],
+    "description": "Spawn a concurrent task"
+  },
+  "Defer": {
+    "prefix": "defer",
+    "body": ["defer ${0:cleanup_call}"],
+    "description": "Defer execution to scope end"
+  },
+  "Lambda / Inline Function": {
+    "prefix": "fn_inline",
+    "body": [
+      "fn ${1:name}(${2:x}) -> give back ${0:x}"
+    ],
+    "description": "Compact single-expression function"
+  },
+  "Trait Definition": {
+    "prefix": "trait",
+    "body": [
+      "trait ${1:TraitName}:",
+      "    can ${2:method}(self):",
+      "        ${0:pass}"
+    ],
+    "description": "Define a trait"
+  },
+  "Impl Block": {
+    "prefix": "impl",
+    "body": [
+      "impl ${1:TraitName} for ${2:StructName}:",
+      "    can ${3:method}(self):",
+      "        ${0:pass}"
+    ],
+    "description": "Implement a trait for a struct"
+  },
+  "Comment Block": {
+    "prefix": "comment",
+    "body": [
+      "# ──────────────────────────────────────",
+      "# ${1:Section Title}",
+      "# ──────────────────────────────────────",
+      "${0}"
+    ],
+    "description": "Comment section separator"
+  }
+}

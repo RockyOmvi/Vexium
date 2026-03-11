@@ -61,10 +61,10 @@ void task_system_shutdown(void) {
         }
     }
     
-    /* Clean up all tasks */
+    /* Clean up all tasks (tracked via prev chain). */
     Task* task = g_task_manager.all_tasks;
     while (task) {
-        Task* next = task->next;
+        Task* next = task->prev;
         task_destroy(task);
         task = next;
     }
@@ -77,14 +77,23 @@ void task_system_shutdown(void) {
  *  TASK CREATION
  * ═══════════════════════════════════════════════════════════════════════════════ */
 
-Task* task_create(ObjClosure* closure, bool blocking) {
+Task* task_create(ObjClosure* closure, bool blocking, Value* args, int argc) {
     Task* task = (Task*)calloc(1, sizeof(Task));
     if (!task) return NULL;
     
     task->id = g_task_manager.next_task_id++;
     task->state = TASK_PENDING;
-    task->closure = closure;
+    task->closure = NULL;
     task->is_blocking = blocking;
+    task->arg_count = argc;
+
+    if (argc > 0) {
+        task->args = (Value*)malloc(sizeof(Value) * (size_t)argc);
+        if (!task->args) {
+            free(task);
+            return NULL;
+        }
+    }
     
     mutex_init(&task->lock);
     cond_init(&task->cond);
@@ -92,8 +101,30 @@ Task* task_create(ObjClosure* closure, bool blocking) {
     /* Create VM for this task - vm_new allocates and initializes */
     task->vm = vm_new();
     if (!task->vm) {
+        if (task->args) free(task->args);
         free(task);
         return NULL;
+    }
+
+    /* Clone callable into task VM so async execution does not depend on parent VM GC lifetime. */
+    Value closure_copy = val_nothing_v();
+    if (!vm_clone_value_to_vm((VM*)task->vm, val_obj(closure), &closure_copy) ||
+        !is_obj(closure_copy) || ((Obj*)as_obj(closure_copy))->type != OBJ_CLOSURE) {
+        vm_free((VM*)task->vm);
+        if (task->args) free(task->args);
+        free(task);
+        return NULL;
+    }
+    task->closure = (ObjClosure*)as_obj(closure_copy);
+
+    /* Copy arguments into the task VM to avoid cross-VM object lifetime hazards. */
+    for (int i = 0; i < argc; i++) {
+        if (!vm_clone_value_to_vm((VM*)task->vm, args[i], &task->args[i])) {
+            vm_free((VM*)task->vm);
+            if (task->args) free(task->args);
+            free(task);
+            return NULL;
+        }
     }
     
     return task;
@@ -109,6 +140,10 @@ void task_destroy(Task* task) {
     if (task->error_msg) {
         free(task->error_msg);
     }
+
+    if (task->args) {
+        free(task->args);
+    }
     
     mutex_destroy(&task->lock);
     cond_destroy(&task->cond);
@@ -123,21 +158,13 @@ void task_destroy(Task* task) {
 static void task_enqueue(Task* task) {
     mutex_lock(&g_task_manager.queue_lock);
     
-    /* Add to ready queue */
+    /* Add to ready queue (uses next). */
     task->next = g_task_manager.ready_queue;
-    if (g_task_manager.ready_queue) {
-        g_task_manager.ready_queue->prev = task;
-    }
     g_task_manager.ready_queue = task;
     
-    /* Add to all tasks list */
-    task->prev = NULL;
-    Task* old_head = g_task_manager.all_tasks;
+    /* Track all allocated tasks separately (uses prev). */
+    task->prev = g_task_manager.all_tasks;
     g_task_manager.all_tasks = task;
-    task->next = old_head;
-    if (old_head) {
-        old_head->prev = task;
-    }
     
     g_task_manager.task_count++;
     
@@ -150,19 +177,15 @@ static Task* task_dequeue(void) {
     
     Task* task = NULL;
     while (!task && !g_task_manager.shutdown) {
-        /* Find first ready task */
-        Task* current = g_task_manager.ready_queue;
-        while (current) {
-            if (current->state == TASK_PENDING || current->state == TASK_RUNNING) {
-                task = current;
-                break;
-            }
-            current = current->next;
+        /* Pop one ready task exactly once. */
+        if (g_task_manager.ready_queue) {
+            task = g_task_manager.ready_queue;
+            g_task_manager.ready_queue = task->next;
+            task->next = NULL;
+            break;
         }
-        
-        if (!task) {
-            cond_wait(&g_task_manager.work_available, &g_task_manager.queue_lock);
-        }
+
+        cond_wait(&g_task_manager.work_available, &g_task_manager.queue_lock);
     }
     
     mutex_unlock(&g_task_manager.queue_lock);
@@ -187,8 +210,9 @@ static DWORD WINAPI task_worker(LPVOID arg) {
         task->state = TASK_RUNNING;
         mutex_unlock(&task->lock);
         
-        /* Execute the task - vm_run expects ObjFunction*, get it from closure */
-        VMResult result = vm_run((VM*)task->vm, task->closure->function);
+        /* Execute closure with captured spawn arguments. */
+        VMResult result = vm_run_closure((VM*)task->vm, task->closure,
+            task->args, task->arg_count);
         
         mutex_lock(&task->lock);
         if (result == VM_OK) {

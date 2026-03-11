@@ -1,0 +1,30 @@
+from ai use tensor_fill
+from ai use tensor_rand
+from ai use tensor_sub
+from ai use tensor_mul
+from ai use tensor_mean
+from ai use tensor_free
+from ai use nn_new
+from ai use nn_add_dense
+from ai use nn_forward
+from ai use nn_train_step
+from ai use nn_free
+
+let x_data be tensor_rand([64, 8])
+let y_data be tensor_fill([64, 1], 1.0)
+let model be nn_new("test")
+nn_add_dense(model, 16, "relu")
+nn_add_dense(model, 1, "tanh")
+let i be 0
+while i < 3:
+    nn_train_step(model, x_data, y_data, 16)
+    let p be nn_forward(model, x_data)
+    let d be tensor_sub(p, y_data)
+    let s be tensor_mul(d, d)
+    let loss be tensor_mean(s)
+    display "loss: " + str(loss)
+    tensor_free(d)
+    tensor_free(s)
+    i be i + 1
+nn_free(model)
+display "done"

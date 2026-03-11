@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 /* ══════════════════════════════════════════════════════════════════════
  *  FILE READING
@@ -55,20 +56,97 @@ static int run_file(const char* path) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+ *  DEBUG FILE — tree-walk interpreter with DAP debug hooks
+ * ══════════════════════════════════════════════════════════════════════ */
+
+static int run_debug_file(const char* path, const char* bp_str) {
+    /* Signal the Node.js adapter that we are ready */
+    fprintf(stderr, "DBG:READY\n");
+    fflush(stderr);
+
+    char* source = read_file(path);
+    if (!source) { fprintf(stderr, "DBG:EXIT:1\n"); return 1; }
+
+    Parser parser;
+    parser_init(&parser, source);
+    ASTNode* program = parser_parse(&parser);
+    if (parser.had_error) {
+        fprintf(stderr, "\nParsing failed.\n");
+        fprintf(stderr, "DBG:EXIT:1\n");
+        ast_free(program); free(source); return 1;
+    }
+
+    Interpreter interp;
+    interpreter_init(&interp);
+    interp.debug_mode       = true;
+    interp.debug_pause_next = true;   /* stop at the very first statement */
+    interp.debug_last_line  = -1;
+    interp.debug_bp_count   = 0;
+    strncpy(interp.debug_src_file, path, sizeof(interp.debug_src_file) - 1);
+    interp.debug_src_file[sizeof(interp.debug_src_file) - 1] = '\0';
+
+    /* Parse comma-separated breakpoint line numbers */
+    if (bp_str && *bp_str) {
+        size_t _bp_len = strlen(bp_str) + 1;
+        char* bp_copy = (char*)malloc(_bp_len);
+        if (!bp_copy) { interpreter_free(&interp); ast_free(program); free(source); return 1; }
+        memcpy(bp_copy, bp_str, _bp_len);
+        char* tok = strtok(bp_copy, ",");
+        while (tok && interp.debug_bp_count < 512) {
+            int ln = atoi(tok);
+            if (ln > 0) interp.debug_bps[interp.debug_bp_count++] = ln;
+            tok = strtok(NULL, ",");
+        }
+        free(bp_copy);
+    }
+
+    interpret_program(&interp, program);
+
+    fprintf(stderr, "DBG:EXIT:%d\n", interp.had_error ? 1 : 0);
+    fflush(stderr);
+
+    int exit_code = interp.had_error ? 1 : 0;
+    interpreter_free(&interp);
+    ast_free(program);
+    free(source);
+    return exit_code;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
  *  RUN VM — Parse, Compile, and execute via bytecode VM
  * ══════════════════════════════════════════════════════════════════════ */
 
 static int run_vm_file(const char* path) {
     char* source = read_file(path);
     if (source == NULL) return 1;
+    
+    /* Initialize VM first so that compilation tracks objects */
+    VM vm;
+    vm_init(&vm);
+    extern VM* running_vm;
+    running_vm = &vm;
+    
     Parser parser;
     parser_init(&parser, source);
     ASTNode* program = parser_parse(&parser);
-    if (parser.had_error) { fprintf(stderr, "\nParsing failed with errors.\n"); ast_free(program); free(source); return 1; }
+    if (parser.had_error) { 
+        fprintf(stderr, "\nParsing failed with errors.\n"); 
+        running_vm = NULL;
+        ast_free(program); 
+        free(source); 
+        vm_free(&vm);
+        return 1; 
+    }
     ObjFunction* fn = compile(program);
-    if (fn == NULL) { fprintf(stderr, "Compilation failed.\n"); ast_free(program); free(source); return 1; }
-    VM vm;
-    vm_init(&vm);
+    if (fn == NULL) { 
+        fprintf(stderr, "Compilation failed.\n"); 
+        running_vm = NULL;
+        ast_free(program); 
+        free(source); 
+        vm_free(&vm);
+        return 1; 
+    }
+    
     VMResult result = vm_run(&vm, fn);
     vm_free(&vm);
     ast_free(program);
@@ -154,13 +232,37 @@ static void disassemble_function(ObjFunction* fn, int indent) {
 static int disasm_file(const char* path) {
     char* source = read_file(path);
     if (source == NULL) return 1;
+    
+    /* Initialize VM to track compilation objects */
+    VM vm;
+    vm_init(&vm);
+    extern VM* running_vm;
+    running_vm = &vm;
+    
     Parser parser; parser_init(&parser, source);
     ASTNode* program = parser_parse(&parser);
-    if (parser.had_error) { ast_free(program); free(source); return 1; }
+    if (parser.had_error) { 
+        running_vm = NULL;
+        vm_free(&vm);
+        ast_free(program); 
+        free(source); 
+        return 1; 
+    }
     ObjFunction* fn = compile(program);
-    if (fn == NULL) { ast_free(program); free(source); return 1; }
+    if (fn == NULL) { 
+        running_vm = NULL;
+        vm_free(&vm);
+        ast_free(program); 
+        free(source); 
+        return 1; 
+    }
     disassemble_function(fn, 0);
-    ast_free(program); free(source); return 0;
+    
+    running_vm = NULL;
+    vm_free(&vm);
+    ast_free(program); 
+    free(source); 
+    return 0;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -182,7 +284,18 @@ static int bench_file(const char* path) {
     printf("  Time: %.6f seconds\n\n", tw_time);
     printf("── Bytecode VM ──\n");
     clock_t vm_start = clock();
-    { ObjFunction* fn = compile(program); if (fn) { VM vm; vm_init(&vm); vm_run(&vm, fn); vm_free(&vm); } }
+    { 
+        VM vm; 
+        vm_init(&vm); 
+        extern VM* running_vm;
+        running_vm = &vm;
+        ObjFunction* fn = compile(program); 
+        if (fn) { 
+            vm_run(&vm, fn); 
+        } 
+        running_vm = NULL;
+        vm_free(&vm); 
+    }
     clock_t vm_end = clock();
     double vm_time = (double)(vm_end - vm_start) / CLOCKS_PER_SEC;
     printf("  Time: %.6f seconds\n\n", vm_time);
@@ -382,12 +495,65 @@ static int lex_file(const char* path) {
     return 0;
 }
 
+static char* trim_line(char* s) {
+    char* start = s;
+    while (*start && isspace((unsigned char)*start)) start++;
+    char* end = start + strlen(start);
+    while (end > start && isspace((unsigned char)end[-1])) end--;
+    *end = '\0';
+    return start;
+}
+
+static void execute_repl_source(Interpreter* interp,
+                                const char* source,
+                                ASTNode*** retained_programs,
+                                int* retained_count,
+                                int* retained_capacity) {
+    Parser parser;
+    parser_init(&parser, source);
+    ASTNode* program = parser_parse(&parser);
+    if (!parser.had_error) {
+        VexValue result = interpret(interp, program, interp->global_env);
+        if (result.type != VAL_NOTHING &&
+            program->as.program.statements.count == 1 &&
+            program->as.program.statements.items[0]->type == NODE_EXPR_STMT) {
+            printf("=> ");
+            vex_print_value(result);
+            printf("\n");
+        }
+        if (*retained_count >= *retained_capacity) {
+            int new_capacity = (*retained_capacity == 0) ? 16 : (*retained_capacity * 2);
+            ASTNode** new_items = (ASTNode**)realloc(*retained_programs, sizeof(ASTNode*) * (size_t)new_capacity);
+            if (new_items != NULL) {
+                *retained_programs = new_items;
+                *retained_capacity = new_capacity;
+            }
+        }
+        if (*retained_count < *retained_capacity) {
+            (*retained_programs)[(*retained_count)++] = program;
+            program = NULL;
+        }
+    }
+    interp->had_error = false;
+    interp->signal.type = SIGNAL_NONE;
+    if (program != NULL) {
+        ast_free(program);
+    }
+}
+
 /* ══════════════════════════════════════════════════════════════════════
  *  REPL — Interactive interpreter
  * ══════════════════════════════════════════════════════════════════════ */
 
 static void run_repl(void) {
     char line[4096];
+    char source[65536];
+    source[0] = '\0';
+    bool multiline = false;
+    int bracket_balance = 0;
+    ASTNode** retained_programs = NULL;
+    int retained_count = 0;
+    int retained_capacity = 0;
     printf(" __   __          _\n");
     printf(" \\ \\ / /_____ __ (_)_  _ _ __ \n");
     printf("  \\ V / -_) \\ / || | || | '  \\\n");
@@ -397,25 +563,68 @@ static void run_repl(void) {
     Interpreter interp;
     interpreter_init(&interp);
     for (;;) {
-        printf("vxm> ");
+        printf(multiline ? "...> " : "vxm> ");
         fflush(stdout);
         if (!fgets(line, sizeof(line), stdin)) { printf("\n"); break; }
-        if (line[0] == '\n' || line[0] == '\r') continue;
-        Parser parser;
-        parser_init(&parser, line);
-        ASTNode* program = parser_parse(&parser);
-        if (!parser.had_error) {
-            VexValue result = interpret(&interp, program, interp.global_env);
-            if (result.type != VAL_NOTHING && program->as.program.statements.count == 1 && program->as.program.statements.items[0]->type == NODE_EXPR_STMT) {
-                printf("=> ");
-                vex_print_value(result);
-                printf("\n");
+        char line_copy[4096];
+        strncpy(line_copy, line, sizeof(line_copy) - 1);
+        line_copy[sizeof(line_copy) - 1] = '\0';
+        char* trimmed = trim_line(line_copy);
+
+        if (!multiline && strcmp(trimmed, "exit") == 0) break;
+
+        if (line[0] == '\n' || line[0] == '\r') {
+            if (multiline && bracket_balance == 0 && source[0] != '\0') {
+                execute_repl_source(&interp, source, &retained_programs, &retained_count, &retained_capacity);
+                source[0] = '\0';
+                multiline = false;
+                bracket_balance = 0;
+            }
+            continue;
+        }
+
+        if (strlen(source) + strlen(line) + 1 < sizeof(source)) {
+            strcat(source, line);
+        } else {
+            fprintf(stderr, "Error: REPL input too large.\n");
+            source[0] = '\0';
+            multiline = false;
+            bracket_balance = 0;
+            continue;
+        }
+
+        for (size_t i = 0; line[i] != '\0'; i++) {
+            switch (line[i]) {
+                case '(':
+                case '[':
+                case '{': bracket_balance++; break;
+                case ')':
+                case ']':
+                case '}': bracket_balance--; break;
+                default: break;
             }
         }
-        interp.had_error = false;
-        interp.signal.type = SIGNAL_NONE;
-        ast_free(program);
+        if (bracket_balance < 0) bracket_balance = 0;
+
+        size_t len = strlen(trimmed);
+        bool block_starter = (len > 0 && trimmed[len - 1] == ':');
+        if (!multiline && (block_starter || bracket_balance > 0)) {
+            multiline = true;
+            continue;
+        }
+        if (multiline && bracket_balance > 0) {
+            continue;
+        }
+
+        execute_repl_source(&interp, source, &retained_programs, &retained_count, &retained_capacity);
+        source[0] = '\0';
+        multiline = false;
+        bracket_balance = 0;
     }
+    for (int i = 0; i < retained_count; i++) {
+        ast_free(retained_programs[i]);
+    }
+    free(retained_programs);
     interpreter_free(&interp);
 }
 
@@ -456,6 +665,11 @@ int main(int argc, char* argv[]) {
     if (strcmp(argv[1], "ast") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium ast' requires a file path.\n"); return 1; } return ast_file(argv[2]); }
     if (strcmp(argv[1], "run") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium run' requires a file path.\n"); return 1; } return run_file(argv[2]); }
     if (strcmp(argv[1], "run-vm") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium run-vm' requires a file path.\n"); return 1; } return run_vm_file(argv[2]); }
+    if (strcmp(argv[1], "debug") == 0) {
+        if (argc < 3) { fprintf(stderr, "Error: 'vexium debug' requires a file path.\n"); return 1; }
+        const char* bp_arg = (argc >= 5 && strcmp(argv[3], "--break") == 0) ? argv[4] : "";
+        return run_debug_file(argv[2], bp_arg);
+    }
     if (strcmp(argv[1], "disasm") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium disasm' requires a file path.\n"); return 1; } return disasm_file(argv[2]); }
     if (strcmp(argv[1], "bench") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium bench' requires a file path.\n"); return 1; } return bench_file(argv[2]); }
     if (strcmp(argv[1], "check") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium check' requires a file path.\n"); return 1; } return check_file(argv[2]); }

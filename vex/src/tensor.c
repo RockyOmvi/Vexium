@@ -177,6 +177,28 @@ static void* allocate_tensor_data(TensorDType dtype, size_t size) {
     }
 }
 
+static bool tensor_same_shape(Tensor* a, Tensor* b) {
+    if (a == NULL || b == NULL) return false;
+    if (a->dtype != b->dtype || a->ndim != b->ndim || a->size != b->size) return false;
+    for (int i = 0; i < a->ndim; i++) {
+        if (a->shape[i] != b->shape[i]) return false;
+    }
+    return true;
+}
+
+static Tensor* tensor_zeros_like(Tensor* src) {
+    if (src == NULL) return NULL;
+    return tensor_zeros(src->dtype, src->ndim, src->shape);
+}
+
+static bool write_exact(const void* ptr, size_t size, size_t count, FILE* f) {
+    return ptr != NULL && f != NULL && fwrite(ptr, size, count, f) == count;
+}
+
+static bool read_exact(void* ptr, size_t size, size_t count, FILE* f) {
+    return ptr != NULL && f != NULL && fread(ptr, size, count, f) == count;
+}
+
 /**
  * Get element size for a given dtype
  */
@@ -489,6 +511,7 @@ Tensor* tensor_randn(int ndim, const int* shape, double mean, double std) {
         /* Generate two independent normal random numbers */
         double u1 = (double)rand() / (double)RAND_MAX;
         double u2 = (double)rand() / (double)RAND_MAX;
+        if (u1 < 1e-12) u1 = 1e-12;
         
         /* Box-Muller transform */
         double z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
@@ -1393,7 +1416,7 @@ struct Layer {
     void* layer_data;
     ActivationType activation;
     Tensor* (*forward)(void* layer_data, Tensor* input);
-    void (*backward)(void* layer_data, Tensor* grad_output, Tensor* input);
+    Tensor* (*backward)(void* layer_data, Tensor* grad_output, Tensor* input);
     void (*free)(void* layer_data);
 };
 
@@ -1409,11 +1432,310 @@ typedef struct {
     Tensor* bias_grad;
 } DenseLayerData;
 
+typedef struct {
+    int filters;
+    int kernel_size;
+    int stride;
+    int padding;
+    int input_width;
+    int output_width;
+    Tensor* weights;      /* shape: [filters, kernel_size] */
+    Tensor* biases;       /* shape: [filters] */
+    Tensor* input;
+    Tensor* output;
+    Tensor* weight_grad;
+    Tensor* bias_grad;
+} Conv1DLayerData;
+
+typedef struct {
+    float rate;
+    bool training;
+    Tensor* mask;
+} DropoutLayerData;
+
+typedef struct {
+    int pool_size;
+    int stride;
+    int input_width;
+    int output_width;
+    int* max_indices;     /* shape: [batch, output_width] */
+    int max_indices_count;
+} MaxPool1DLayerData;
+
+static void dense_clear_cached_io(DenseLayerData* data) {
+    if (data == NULL) return;
+    tensor_free(data->input);
+    tensor_free(data->output);
+    data->input = NULL;
+    data->output = NULL;
+}
+
+static Tensor* conv1d_forward(void* layer_data, Tensor* input) {
+    Conv1DLayerData* data = (Conv1DLayerData*)layer_data;
+    if (data == NULL || input == NULL || input->dtype != TENSOR_FLOAT32 || input->ndim != 2) return NULL;
+
+    tensor_free(data->input);
+    tensor_free(data->output);
+    data->input = tensor_clone(input);
+
+    int batch = input->shape[0];
+    int in_w = input->shape[1];
+    if (in_w <= 0 || data->kernel_size <= 0 || data->filters <= 0 || data->stride <= 0) return NULL;
+
+    int out_w = (in_w + 2 * data->padding - data->kernel_size) / data->stride + 1;
+    if (out_w <= 0) return NULL;
+
+    if (data->weights == NULL || data->biases == NULL || data->input_width != in_w || data->output_width != out_w) {
+        int weight_shape[2] = {data->filters, data->kernel_size};
+        int bias_shape[1] = {data->filters};
+        tensor_free(data->weights);
+        tensor_free(data->biases);
+        data->weights = tensor_randn(2, weight_shape, 0.0, sqrt(2.0 / (double)(data->kernel_size + data->filters)));
+        data->biases = tensor_zeros(TENSOR_FLOAT32, 1, bias_shape);
+        data->input_width = in_w;
+        data->output_width = out_w;
+    }
+
+    {
+        int out_shape[2] = {batch, out_w * data->filters};
+        Tensor* out = tensor_zeros(TENSOR_FLOAT32, 2, out_shape);
+        if (out == NULL) return NULL;
+
+        for (int b = 0; b < batch; b++) {
+            for (int f = 0; f < data->filters; f++) {
+                float bias = data->biases->data.f32_data[f];
+                for (int ow = 0; ow < out_w; ow++) {
+                    float sum = bias;
+                    for (int k = 0; k < data->kernel_size; k++) {
+                        int in_idx = ow * data->stride + k - data->padding;
+                        if (in_idx >= 0 && in_idx < in_w) {
+                            float x = input->data.f32_data[b * in_w + in_idx];
+                            float w = data->weights->data.f32_data[f * data->kernel_size + k];
+                            sum += x * w;
+                        }
+                    }
+                    out->data.f32_data[b * (out_w * data->filters) + f * out_w + ow] = sum;
+                }
+            }
+        }
+
+        data->output = out;
+        return out;
+    }
+}
+
+static Tensor* conv1d_backward(void* layer_data, Tensor* grad_output, Tensor* input) {
+    Conv1DLayerData* data = (Conv1DLayerData*)layer_data;
+    UNUSED(input);
+    if (data == NULL || grad_output == NULL || data->input == NULL || data->weights == NULL) return NULL;
+    if (grad_output->dtype != TENSOR_FLOAT32 || grad_output->ndim != 2) return NULL;
+
+    int batch = data->input->shape[0];
+    int in_w = data->input->shape[1];
+    int out_w = data->output_width;
+    if (batch <= 0 || in_w <= 0 || out_w <= 0) return NULL;
+
+    {
+        int grad_in_shape[2] = {batch, in_w};
+        int grad_w_shape[2] = {data->filters, data->kernel_size};
+        int grad_b_shape[1] = {data->filters};
+        Tensor* grad_input = tensor_zeros(TENSOR_FLOAT32, 2, grad_in_shape);
+        Tensor* grad_w = tensor_zeros(TENSOR_FLOAT32, 2, grad_w_shape);
+        Tensor* grad_b = tensor_zeros(TENSOR_FLOAT32, 1, grad_b_shape);
+        if (grad_input == NULL || grad_w == NULL || grad_b == NULL) {
+            tensor_free(grad_input);
+            tensor_free(grad_w);
+            tensor_free(grad_b);
+            return NULL;
+        }
+
+        for (int b = 0; b < batch; b++) {
+            for (int f = 0; f < data->filters; f++) {
+                for (int ow = 0; ow < out_w; ow++) {
+                    float go = grad_output->data.f32_data[b * (out_w * data->filters) + f * out_w + ow];
+                    grad_b->data.f32_data[f] += go;
+                    for (int k = 0; k < data->kernel_size; k++) {
+                        int in_idx = ow * data->stride + k - data->padding;
+                        if (in_idx >= 0 && in_idx < in_w) {
+                            float x = data->input->data.f32_data[b * in_w + in_idx];
+                            float w = data->weights->data.f32_data[f * data->kernel_size + k];
+                            grad_w->data.f32_data[f * data->kernel_size + k] += x * go;
+                            grad_input->data.f32_data[b * in_w + in_idx] += w * go;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (batch > 0) {
+            float inv_batch = 1.0f / (float)batch;
+            tensor_imul_scalar(grad_w, inv_batch);
+            tensor_imul_scalar(grad_b, inv_batch);
+        }
+
+        tensor_free(data->weight_grad);
+        tensor_free(data->bias_grad);
+        data->weight_grad = grad_w;
+        data->bias_grad = grad_b;
+        return grad_input;
+    }
+}
+
+static void conv1d_free(void* layer_data) {
+    Conv1DLayerData* data = (Conv1DLayerData*)layer_data;
+    if (data == NULL) return;
+    tensor_free(data->weights);
+    tensor_free(data->biases);
+    tensor_free(data->input);
+    tensor_free(data->output);
+    tensor_free(data->weight_grad);
+    tensor_free(data->bias_grad);
+    free(data);
+}
+
+static Tensor* dropout_forward(void* layer_data, Tensor* input) {
+    DropoutLayerData* data = (DropoutLayerData*)layer_data;
+    if (data == NULL || input == NULL) return NULL;
+
+    tensor_free(data->mask);
+    data->mask = NULL;
+
+    if (!data->training || data->rate <= 0.0f) {
+        return tensor_clone(input);
+    }
+
+    {
+        Tensor* out = tensor_clone(input);
+        Tensor* mask = tensor_zeros(TENSOR_FLOAT32, input->ndim, input->shape);
+        float keep_prob = 1.0f - data->rate;
+        if (out == NULL || mask == NULL || keep_prob <= 0.0f) {
+            tensor_free(out);
+            tensor_free(mask);
+            return tensor_clone(input);
+        }
+
+        for (size_t i = 0; i < input->size; i++) {
+            float keep = (((float)rand() / (float)RAND_MAX) < keep_prob) ? (1.0f / keep_prob) : 0.0f;
+            mask->data.f32_data[i] = keep;
+            out->data.f32_data[i] *= keep;
+        }
+
+        data->mask = mask;
+        return out;
+    }
+}
+
+static Tensor* dropout_backward(void* layer_data, Tensor* grad_output, Tensor* input) {
+    DropoutLayerData* data = (DropoutLayerData*)layer_data;
+    UNUSED(input);
+    if (data == NULL || grad_output == NULL) return NULL;
+    if (data->mask == NULL || !tensor_same_shape(data->mask, grad_output)) return tensor_clone(grad_output);
+
+    {
+        Tensor* grad = tensor_clone(grad_output);
+        if (grad == NULL) return NULL;
+        tensor_imul(grad, data->mask);
+        return grad;
+    }
+}
+
+static void dropout_free(void* layer_data) {
+    DropoutLayerData* data = (DropoutLayerData*)layer_data;
+    if (data == NULL) return;
+    tensor_free(data->mask);
+    free(data);
+}
+
+static Tensor* maxpool1d_forward(void* layer_data, Tensor* input) {
+    MaxPool1DLayerData* data = (MaxPool1DLayerData*)layer_data;
+    if (data == NULL || input == NULL || input->dtype != TENSOR_FLOAT32 || input->ndim != 2) return NULL;
+
+    int batch = input->shape[0];
+    int in_w = input->shape[1];
+    if (in_w <= 0 || data->pool_size <= 0 || data->stride <= 0) return NULL;
+    int out_w = (in_w - data->pool_size) / data->stride + 1;
+    if (out_w <= 0) return NULL;
+
+    {
+        int out_shape[2] = {batch, out_w};
+        Tensor* out = tensor_zeros(TENSOR_FLOAT32, 2, out_shape);
+        if (out == NULL) return NULL;
+
+        free(data->max_indices);
+        data->max_indices = (int*)malloc(sizeof(int) * batch * out_w);
+        data->max_indices_count = batch * out_w;
+        data->input_width = in_w;
+        data->output_width = out_w;
+        if (data->max_indices == NULL) {
+            tensor_free(out);
+            return NULL;
+        }
+
+        for (int b = 0; b < batch; b++) {
+            for (int ow = 0; ow < out_w; ow++) {
+                int start = ow * data->stride;
+                float max_val = -INFINITY;
+                int max_idx = start;
+                for (int k = 0; k < data->pool_size; k++) {
+                    int idx = start + k;
+                    if (idx >= 0 && idx < in_w) {
+                        float v = input->data.f32_data[b * in_w + idx];
+                        if (v > max_val) {
+                            max_val = v;
+                            max_idx = idx;
+                        }
+                    }
+                }
+                out->data.f32_data[b * out_w + ow] = max_val;
+                data->max_indices[b * out_w + ow] = max_idx;
+            }
+        }
+
+        return out;
+    }
+}
+
+static Tensor* maxpool1d_backward(void* layer_data, Tensor* grad_output, Tensor* input) {
+    MaxPool1DLayerData* data = (MaxPool1DLayerData*)layer_data;
+    UNUSED(input);
+    if (data == NULL || grad_output == NULL || grad_output->dtype != TENSOR_FLOAT32 || grad_output->ndim != 2) return NULL;
+    if (data->max_indices == NULL || data->input_width <= 0 || data->output_width <= 0) return NULL;
+
+    {
+        int batch = grad_output->shape[0];
+        int grad_in_shape[2] = {batch, data->input_width};
+        Tensor* grad_input = tensor_zeros(TENSOR_FLOAT32, 2, grad_in_shape);
+        if (grad_input == NULL) return NULL;
+
+        for (int b = 0; b < batch; b++) {
+            for (int ow = 0; ow < data->output_width; ow++) {
+                int src_idx = b * data->output_width + ow;
+                int dst = data->max_indices[src_idx];
+                if (dst >= 0 && dst < data->input_width) {
+                    grad_input->data.f32_data[b * data->input_width + dst] += grad_output->data.f32_data[src_idx];
+                }
+            }
+        }
+
+        return grad_input;
+    }
+}
+
+static void maxpool1d_free(void* layer_data) {
+    MaxPool1DLayerData* data = (MaxPool1DLayerData*)layer_data;
+    if (data == NULL) return;
+    free(data->max_indices);
+    free(data);
+}
+
 /**
  * Forward pass for dense layer
  */
 static Tensor* dense_forward(void* layer_data, Tensor* input) {
     DenseLayerData* data = (DenseLayerData*)layer_data;
+    if (data == NULL || input == NULL) return NULL;
+
+    dense_clear_cached_io(data);
     
     /* Cache input for backward pass */
     data->input = tensor_clone(input);
@@ -1434,20 +1756,56 @@ static Tensor* dense_forward(void* layer_data, Tensor* input) {
 /**
  * Backward pass for dense layer
  */
-static void dense_backward(void* layer_data, Tensor* grad_output, Tensor* input) {
+static Tensor* dense_backward(void* layer_data, Tensor* grad_output, Tensor* input) {
     DenseLayerData* data = (DenseLayerData*)layer_data;
+    if (data == NULL || grad_output == NULL) return NULL;
+    if (input == NULL) input = data->input;
+    if (input == NULL) return NULL;
+    if (input->ndim != 2 || grad_output->ndim != 2) return NULL;
     
     /* Compute weight gradients: input.T @ grad_output */
     Tensor* input_T = tensor_transpose(input);
+    if (input_T == NULL) return NULL;
     Tensor* weight_grad = tensor_matmul(input_T, grad_output);
-    tensor_transpose(input_T);  /* Free the transposed copy */
+    tensor_free(input_T);
+    if (weight_grad == NULL) return NULL;
     
     /* Compute bias gradients: sum(grad_output, axis=0) */
-    Tensor* bias_grad = tensor_clone(grad_output);
-    /* In a full implementation, we'd sum over the appropriate axis */
+    int batch = grad_output->shape[0];
+    int units = grad_output->shape[1];
+    int bias_shape[1] = {units};
+    Tensor* bias_grad = tensor_zeros(TENSOR_FLOAT32, 1, bias_shape);
+    if (bias_grad == NULL) {
+        tensor_free(weight_grad);
+        return NULL;
+    }
+
+    for (int b = 0; b < batch; b++) {
+        for (int u = 0; u < units; u++) {
+            bias_grad->data.f32_data[u] += grad_output->data.f32_data[b * units + u];
+        }
+    }
+
+    if (batch > 0) {
+        float inv_batch = 1.0f / (float)batch;
+        tensor_imul_scalar(weight_grad, inv_batch);
+        tensor_imul_scalar(bias_grad, inv_batch);
+    }
+
+    /* Compute input gradients for upstream layer: grad_output @ weights.T */
+    Tensor* weights_T = tensor_transpose(data->weights);
+    Tensor* grad_input = NULL;
+    if (weights_T != NULL) {
+        grad_input = tensor_matmul(grad_output, weights_T);
+        tensor_free(weights_T);
+    }
+
+    if (data->weight_grad != NULL) tensor_free(data->weight_grad);
+    if (data->bias_grad != NULL) tensor_free(data->bias_grad);
     
     data->weight_grad = weight_grad;
     data->bias_grad = bias_grad;
+    return grad_input;
 }
 
 /**
@@ -1496,7 +1854,7 @@ NNModel* nn_model_new(const char* name) {
  * @param units         Number of output units
  * @param activation   Activation function
  */
-void nn_model_add_dense(NNModel* model, int units, ActivationType activation) {
+void nn_model_add_dense(NNModel* model, int units, ActivationType activation, int input_size_override) {
     if (model == NULL) return;
     
     /* Grow layers array if needed */
@@ -1510,11 +1868,16 @@ void nn_model_add_dense(NNModel* model, int units, ActivationType activation) {
     Layer* layer = (Layer*)malloc(sizeof(Layer));
     DenseLayerData* data = (DenseLayerData*)malloc(sizeof(DenseLayerData));
     
-    /* Get input size from previous layer or use default */
-    int input_size = 784;  /* Default for MNIST */
+    /* Get input size from previous layer or use explicit override */
+    int input_size = (input_size_override > 0) ? input_size_override : 784;  /* Default for MNIST */
     if (model->layer_count > 0) {
-        /* Get output size from previous layer */
-        /* For simplicity, use a reasonable default */
+        Layer* prev = model->layers[model->layer_count - 1];
+        if (prev != NULL && prev->type == LAYER_DENSE && prev->layer_data != NULL) {
+            DenseLayerData* prev_data = (DenseLayerData*)prev->layer_data;
+            if (prev_data->weights != NULL && prev_data->weights->ndim == 2) {
+                input_size = prev_data->weights->shape[1];
+            }
+        }
     }
     
     /* Initialize Xavier/He weights */
@@ -1552,11 +1915,39 @@ void nn_model_add_dense(NNModel* model, int units, ActivationType activation) {
  */
 void nn_model_add_conv2d(NNModel* model, int filters, int kernel_size,
                         int stride, int padding, ActivationType activation) {
-    if (model == NULL) return;
-    
-    /* Note: Full Conv2D implementation would require more complex
-     * convolution operations. This is a placeholder. */
-    fprintf(stderr, "[NN] Conv2D layer not fully implemented\n");
+    if (model == NULL || filters <= 0 || kernel_size <= 0 || stride <= 0) return;
+
+    if (model->layer_count >= model->layer_capacity) {
+        int new_capacity = model->layer_capacity == 0 ? 4 : model->layer_capacity * 2;
+        Layer** grown = (Layer**)realloc(model->layers, new_capacity * sizeof(Layer*));
+        if (grown == NULL) return;
+        model->layers = grown;
+        model->layer_capacity = new_capacity;
+    }
+
+    {
+        Layer* layer = (Layer*)calloc(1, sizeof(Layer));
+        Conv1DLayerData* data = (Conv1DLayerData*)calloc(1, sizeof(Conv1DLayerData));
+        if (layer == NULL || data == NULL) {
+            free(layer);
+            free(data);
+            return;
+        }
+
+        data->filters = filters;
+        data->kernel_size = kernel_size;
+        data->stride = stride;
+        data->padding = padding;
+
+        layer->type = LAYER_CONV2D;
+        layer->layer_data = data;
+        layer->activation = activation;
+        layer->forward = conv1d_forward;
+        layer->backward = conv1d_backward;
+        layer->free = conv1d_free;
+
+        model->layers[model->layer_count++] = layer;
+    }
 }
 
 /**
@@ -1566,12 +1957,37 @@ void nn_model_add_conv2d(NNModel* model, int filters, int kernel_size,
  * @param rate          Dropout rate (probability of dropping)
  */
 void nn_model_add_dropout(NNModel* model, double rate) {
-    if (model == NULL) return;
-    
-    /* Note: Dropout is a regularization technique that only
-     * applies during training. Full implementation would require
-     * mask generation and scaling. */
-    fprintf(stderr, "[NN] Dropout layer not fully implemented\n");
+    if (model == NULL || rate < 0.0 || rate >= 1.0) return;
+
+    if (model->layer_count >= model->layer_capacity) {
+        int new_capacity = model->layer_capacity == 0 ? 4 : model->layer_capacity * 2;
+        Layer** grown = (Layer**)realloc(model->layers, new_capacity * sizeof(Layer*));
+        if (grown == NULL) return;
+        model->layers = grown;
+        model->layer_capacity = new_capacity;
+    }
+
+    {
+        Layer* layer = (Layer*)calloc(1, sizeof(Layer));
+        DropoutLayerData* data = (DropoutLayerData*)calloc(1, sizeof(DropoutLayerData));
+        if (layer == NULL || data == NULL) {
+            free(layer);
+            free(data);
+            return;
+        }
+
+        data->rate = (float)rate;
+        data->training = true;
+
+        layer->type = LAYER_DROPOUT;
+        layer->layer_data = data;
+        layer->activation = ACTIVATION_NONE;
+        layer->forward = dropout_forward;
+        layer->backward = dropout_backward;
+        layer->free = dropout_free;
+
+        model->layers[model->layer_count++] = layer;
+    }
 }
 
 /**
@@ -1582,9 +1998,37 @@ void nn_model_add_dropout(NNModel* model, double rate) {
  * @param stride        Pooling stride
  */
 void nn_model_add_maxpool2d(NNModel* model, int pool_size, int stride) {
-    if (model == NULL) return;
-    
-    fprintf(stderr, "[NN] MaxPool2D layer not fully implemented\n");
+    if (model == NULL || pool_size <= 0 || stride <= 0) return;
+
+    if (model->layer_count >= model->layer_capacity) {
+        int new_capacity = model->layer_capacity == 0 ? 4 : model->layer_capacity * 2;
+        Layer** grown = (Layer**)realloc(model->layers, new_capacity * sizeof(Layer*));
+        if (grown == NULL) return;
+        model->layers = grown;
+        model->layer_capacity = new_capacity;
+    }
+
+    {
+        Layer* layer = (Layer*)calloc(1, sizeof(Layer));
+        MaxPool1DLayerData* data = (MaxPool1DLayerData*)calloc(1, sizeof(MaxPool1DLayerData));
+        if (layer == NULL || data == NULL) {
+            free(layer);
+            free(data);
+            return;
+        }
+
+        data->pool_size = pool_size;
+        data->stride = stride;
+
+        layer->type = LAYER_MAXPOOL2D;
+        layer->layer_data = data;
+        layer->activation = ACTIVATION_NONE;
+        layer->forward = maxpool1d_forward;
+        layer->backward = maxpool1d_backward;
+        layer->free = maxpool1d_free;
+
+        model->layers[model->layer_count++] = layer;
+    }
 }
 
 /**
@@ -1602,9 +2046,16 @@ Tensor* nn_model_forward(NNModel* model, Tensor* input) {
     
     for (int i = 0; i < model->layer_count; i++) {
         Layer* layer = model->layers[i];
+        if (layer == NULL) continue;
+
+        if (layer->type == LAYER_DROPOUT && layer->layer_data != NULL) {
+            DropoutLayerData* dropout = (DropoutLayerData*)layer->layer_data;
+            dropout->training = model->training;
+        }
         
         /* Forward pass */
         Tensor* layer_output = layer->forward(layer->layer_data, current);
+        if (layer_output == NULL) return NULL;
         
         /* Apply activation */
         switch (layer->activation) {
@@ -1640,10 +2091,44 @@ Tensor* nn_model_forward(NNModel* model, Tensor* input) {
  */
 void nn_model_backward(NNModel* model, Tensor* loss) {
     if (model == NULL || loss == NULL) return;
-    
-    /* Note: Full backward pass implementation would propagate
-     * gradients through each layer in reverse order */
-    fprintf(stderr, "[NN] Backward pass not fully implemented\n");
+
+    Tensor* grad = tensor_clone(loss);
+    if (grad == NULL) return;
+
+    for (int i = model->layer_count - 1; i >= 0; i--) {
+        Layer* layer = model->layers[i];
+        if (layer == NULL || layer->layer_data == NULL) continue;
+
+        if (layer->type == LAYER_DENSE) {
+            DenseLayerData* data = (DenseLayerData*)layer->layer_data;
+            if (data->output == NULL) continue;
+
+            if (layer->activation == ACTIVATION_RELU) {
+                for (size_t j = 0; j < grad->size && j < data->output->size; j++) {
+                    if (data->output->data.f32_data[j] <= 0.0f) grad->data.f32_data[j] = 0.0f;
+                }
+            } else if (layer->activation == ACTIVATION_SIGMOID) {
+                for (size_t j = 0; j < grad->size && j < data->output->size; j++) {
+                    float z = data->output->data.f32_data[j];
+                    float s = 1.0f / (1.0f + expf(-z));
+                    grad->data.f32_data[j] *= s * (1.0f - s);
+                }
+            } else if (layer->activation == ACTIVATION_TANH) {
+                for (size_t j = 0; j < grad->size && j < data->output->size; j++) {
+                    float z = data->output->data.f32_data[j];
+                    float t = tanhf(z);
+                    grad->data.f32_data[j] *= (1.0f - t * t);
+                }
+            }
+        }
+
+        Tensor* prev_grad = layer->backward(layer->layer_data, grad, NULL);
+        tensor_free(grad);
+        grad = prev_grad;
+        if (grad == NULL) break;
+    }
+
+    tensor_free(grad);
 }
 
 /**
@@ -1653,10 +2138,56 @@ void nn_model_backward(NNModel* model, Tensor* loss) {
  */
 void nn_model_update(NNModel* model) {
     if (model == NULL) return;
-    
-    /* Note: Full implementation would apply optimizer updates
-     * to each layer's parameters */
-    fprintf(stderr, "[NN] Weight update not fully implemented\n");
+
+    for (int i = 0; i < model->layer_count; i++) {
+        Layer* layer = model->layers[i];
+        if (layer == NULL || layer->layer_data == NULL) continue;
+
+        if (layer->type == LAYER_DENSE) {
+            DenseLayerData* data = (DenseLayerData*)layer->layer_data;
+            if (data->weights != NULL && data->weight_grad != NULL) {
+                int count = (int)(data->weights->size < data->weight_grad->size ? data->weights->size : data->weight_grad->size);
+                for (int j = 0; j < count; j++) {
+                    data->weights->data.f32_data[j] -= (float)(model->learning_rate) * data->weight_grad->data.f32_data[j];
+                }
+            }
+
+            if (data->biases != NULL && data->bias_grad != NULL) {
+                int count = (int)(data->biases->size < data->bias_grad->size ? data->biases->size : data->bias_grad->size);
+                for (int j = 0; j < count; j++) {
+                    data->biases->data.f32_data[j] -= (float)(model->learning_rate) * data->bias_grad->data.f32_data[j];
+                }
+            }
+
+            tensor_free(data->weight_grad);
+            tensor_free(data->bias_grad);
+            data->weight_grad = NULL;
+            data->bias_grad = NULL;
+            dense_clear_cached_io(data);
+        } else if (layer->type == LAYER_CONV2D) {
+            Conv1DLayerData* data = (Conv1DLayerData*)layer->layer_data;
+            if (data->weights != NULL && data->weight_grad != NULL) {
+                int count = (int)(data->weights->size < data->weight_grad->size ? data->weights->size : data->weight_grad->size);
+                for (int j = 0; j < count; j++) {
+                    data->weights->data.f32_data[j] -= (float)(model->learning_rate) * data->weight_grad->data.f32_data[j];
+                }
+            }
+            if (data->biases != NULL && data->bias_grad != NULL) {
+                int count = (int)(data->biases->size < data->bias_grad->size ? data->biases->size : data->bias_grad->size);
+                for (int j = 0; j < count; j++) {
+                    data->biases->data.f32_data[j] -= (float)(model->learning_rate) * data->bias_grad->data.f32_data[j];
+                }
+            }
+            tensor_free(data->weight_grad);
+            tensor_free(data->bias_grad);
+            data->weight_grad = NULL;
+            data->bias_grad = NULL;
+            tensor_free(data->input);
+            tensor_free(data->output);
+            data->input = NULL;
+            data->output = NULL;
+        }
+    }
 }
 
 /**
@@ -1667,20 +2198,98 @@ void nn_model_update(NNModel* model) {
  * @param y             Training targets
  * @param batch_size    Batch size
  */
-void nn_model_train(NNModel* model, Tensor* X, Tensor* y, int batch_size) {
-    if (model == NULL || X == NULL || y == NULL) return;
-    
+double nn_model_train_with_loss(NNModel* model, Tensor* X, Tensor* y, int batch_size, LossType loss_type) {
+    if (model == NULL || X == NULL || y == NULL) return 0.0;
+
     model->training = true;
-    
-    /* Note: Full training loop would:
-     * 1. Split data into batches
-     * 2. For each batch:
-     *    - Forward pass
-     *    - Compute loss
-     *    - Backward pass
-     *    - Update weights
-     */
-    fprintf(stderr, "[NN] Training loop not fully implemented\n");
+
+    if (X->ndim != 2 || y->ndim != 2) return 0.0;
+    if (X->shape[0] != y->shape[0]) return 0.0;
+
+    int total = X->shape[0];
+    int in_dim = X->shape[1];
+    int out_dim = y->shape[1];
+    if (batch_size <= 0 || batch_size > total) batch_size = total;
+
+    int x_shape[2] = {batch_size, in_dim};
+    int y_shape[2] = {batch_size, out_dim};
+    Tensor* xb = tensor_new(TENSOR_FLOAT32, 2, x_shape);
+    Tensor* yb = tensor_new(TENSOR_FLOAT32, 2, y_shape);
+    if (xb == NULL || yb == NULL) {
+        tensor_free(xb);
+        tensor_free(yb);
+        return 0.0;
+    }
+
+    double total_loss = 0.0;
+    int total_seen = 0;
+
+    int start = 0;
+    while (start < total) {
+        int current_batch = batch_size;
+        if (start + current_batch > total) current_batch = total - start;
+
+        for (int r = 0; r < current_batch; r++) {
+            memcpy(&xb->data.f32_data[r * in_dim], &X->data.f32_data[(start + r) * in_dim], (size_t)in_dim * sizeof(float));
+            memcpy(&yb->data.f32_data[r * out_dim], &y->data.f32_data[(start + r) * out_dim], (size_t)out_dim * sizeof(float));
+        }
+
+        if (current_batch < batch_size) {
+            memset(&xb->data.f32_data[current_batch * in_dim], 0, (size_t)(batch_size - current_batch) * (size_t)in_dim * sizeof(float));
+            memset(&yb->data.f32_data[current_batch * out_dim], 0, (size_t)(batch_size - current_batch) * (size_t)out_dim * sizeof(float));
+        }
+
+        Tensor* pred = nn_model_forward(model, xb);
+        if (pred == NULL || pred->ndim != 2 || pred->shape[0] != batch_size || pred->shape[1] != out_dim) {
+            start += current_batch;
+            continue;
+        }
+
+        int grad_shape[2] = {batch_size, out_dim};
+        Tensor* grad = tensor_new(TENSOR_FLOAT32, 2, grad_shape);
+        if (grad == NULL) {
+            start += current_batch;
+            continue;
+        }
+
+        if (loss_type == LOSS_CROSS_ENTROPY) {
+            float inv_batch = (current_batch > 0) ? (1.0f / (float)current_batch) : 0.0f;
+            for (int i = 0; i < current_batch * out_dim; i++) {
+                double pred_val = (double)pred->data.f32_data[i];
+                double target_val = (double)yb->data.f32_data[i];
+                double clamped = pred_val < 1e-7 ? 1e-7 : (pred_val > 1.0 - 1e-7 ? 1.0 - 1e-7 : pred_val);
+                total_loss += -target_val * log(clamped);
+                grad->data.f32_data[i] = (float)((pred_val - target_val) * inv_batch);
+            }
+            total_seen += current_batch;
+        } else {
+            float scale = (current_batch > 0) ? (2.0f / (float)current_batch) : 0.0f;
+            for (int i = 0; i < current_batch * out_dim; i++) {
+                double diff = (double)pred->data.f32_data[i] - (double)yb->data.f32_data[i];
+                total_loss += diff * diff;
+                grad->data.f32_data[i] = (float)(diff * scale);
+            }
+            total_seen += current_batch * out_dim;
+        }
+
+        for (int i = current_batch * out_dim; i < batch_size * out_dim; i++) {
+            grad->data.f32_data[i] = 0.0f;
+        }
+
+        nn_model_backward(model, grad);
+        nn_model_update(model);
+        tensor_free(grad);
+
+        start += current_batch;
+    }
+
+    tensor_free(xb);
+    tensor_free(yb);
+    return total_seen > 0 ? (total_loss / (double)total_seen) : 0.0;
+}
+
+double nn_model_train(NNModel* model, Tensor* X, Tensor* y, int batch_size) {
+    return nn_model_train_with_loss(model, X, y, batch_size, LOSS_MSE);
 }
 
 /**
@@ -1695,6 +2304,17 @@ Tensor* nn_model_predict(NNModel* model, Tensor* input) {
     
     model->training = false;
     return nn_model_forward(model, input);
+}
+
+void nn_model_set_learning_rate(NNModel* model, double learning_rate) {
+    if (model == NULL) return;
+    if (learning_rate <= 0.0) return;
+    model->learning_rate = learning_rate;
+}
+
+double nn_model_get_learning_rate(NNModel* model) {
+    if (model == NULL) return 0.0;
+    return model->learning_rate;
 }
 
 /**
@@ -1713,16 +2333,47 @@ bool nn_model_save(NNModel* model, const char* filepath) {
         return false;
     }
     
-    /* Write model name */
-    fwrite(model->name, strlen(model->name) + 1, 1, f);
-    
-    /* Write layer count */
-    fwrite(&model->layer_count, sizeof(int), 1, f);
-    
-    /* Write learning rate */
-    fwrite(&model->learning_rate, sizeof(double), 1, f);
-    
-    /* Note: Full implementation would save each layer's weights */
+    {
+        const char magic[8] = {'V','X','M','N','N','1','\0','\0'};
+        uint32_t version = 1;
+        uint32_t name_len = (uint32_t)strlen(model->name);
+
+        if (!write_exact(magic, sizeof(char), 8, f) ||
+            !write_exact(&version, sizeof(uint32_t), 1, f) ||
+            !write_exact(&name_len, sizeof(uint32_t), 1, f) ||
+            !write_exact(model->name, sizeof(char), name_len, f) ||
+            !write_exact(&model->layer_count, sizeof(int), 1, f) ||
+            !write_exact(&model->learning_rate, sizeof(double), 1, f)) {
+            fclose(f);
+            return false;
+        }
+
+        for (int i = 0; i < model->layer_count; i++) {
+            Layer* layer = model->layers[i];
+            DenseLayerData* data = (layer != NULL) ? (DenseLayerData*)layer->layer_data : NULL;
+            int layer_type = (layer != NULL) ? (int)layer->type : -1;
+            int activation = (layer != NULL) ? (int)layer->activation : -1;
+            int input_size = (data != NULL && data->weights != NULL && data->weights->ndim == 2) ? data->weights->shape[0] : 0;
+            int units = (data != NULL && data->weights != NULL && data->weights->ndim == 2) ? data->weights->shape[1] : 0;
+            int use_bias = (data != NULL && data->biases != NULL) ? 1 : 0;
+
+            if (layer_type != LAYER_DENSE || input_size <= 0 || units <= 0 ||
+                !write_exact(&layer_type, sizeof(int), 1, f) ||
+                !write_exact(&activation, sizeof(int), 1, f) ||
+                !write_exact(&input_size, sizeof(int), 1, f) ||
+                !write_exact(&units, sizeof(int), 1, f) ||
+                !write_exact(&use_bias, sizeof(int), 1, f) ||
+                !write_exact(data->weights->data.f32_data, sizeof(float), (size_t)input_size * (size_t)units, f)) {
+                fclose(f);
+                return false;
+            }
+
+            if (use_bias && !write_exact(data->biases->data.f32_data, sizeof(float), (size_t)units, f)) {
+                fclose(f);
+                return false;
+            }
+        }
+    }
     
     fclose(f);
     return true;
@@ -1743,30 +2394,88 @@ NNModel* nn_model_load(const char* filepath) {
         return NULL;
     }
     
-    /* Read model name */
-    char name[256];
-    size_t read = fread(name, 1, 256, f);
-    if (read == 0) {
+    {
+        char magic[8] = {0};
+        uint32_t version = 0;
+        uint32_t name_len = 0;
+        int layer_count = 0;
+        char* name = NULL;
+        NNModel* model = NULL;
+
+        if (!read_exact(magic, sizeof(char), 8, f) || memcmp(magic, "VXMNN1\0\0", 8) != 0 ||
+            !read_exact(&version, sizeof(uint32_t), 1, f) || version != 1 ||
+            !read_exact(&name_len, sizeof(uint32_t), 1, f) || name_len == 0 || name_len > 4096) {
+            fclose(f);
+            return NULL;
+        }
+
+        name = (char*)malloc((size_t)name_len + 1);
+        if (name == NULL || !read_exact(name, sizeof(char), name_len, f)) {
+            free(name);
+            fclose(f);
+            return NULL;
+        }
+        name[name_len] = '\0';
+
+        model = nn_model_new(name);
+        free(name);
+        if (model == NULL ||
+            !read_exact(&layer_count, sizeof(int), 1, f) ||
+            !read_exact(&model->learning_rate, sizeof(double), 1, f)) {
+            nn_model_free(model);
+            fclose(f);
+            return NULL;
+        }
+
+        for (int i = 0; i < layer_count; i++) {
+            int layer_type = 0;
+            int activation = 0;
+            int input_size = 0;
+            int units = 0;
+            int use_bias = 0;
+
+            if (!read_exact(&layer_type, sizeof(int), 1, f) ||
+                !read_exact(&activation, sizeof(int), 1, f) ||
+                !read_exact(&input_size, sizeof(int), 1, f) ||
+                !read_exact(&units, sizeof(int), 1, f) ||
+                !read_exact(&use_bias, sizeof(int), 1, f) ||
+                layer_type != LAYER_DENSE || input_size <= 0 || units <= 0) {
+                nn_model_free(model);
+                fclose(f);
+                return NULL;
+            }
+
+            nn_model_add_dense(model, units, (ActivationType)activation, input_size);
+            if (model->layer_count <= 0 || model->layers[model->layer_count - 1] == NULL || model->layers[model->layer_count - 1]->layer_data == NULL) {
+                nn_model_free(model);
+                fclose(f);
+                return NULL;
+            }
+
+            {
+                DenseLayerData* data = (DenseLayerData*)model->layers[model->layer_count - 1]->layer_data;
+                if (!read_exact(data->weights->data.f32_data, sizeof(float), (size_t)input_size * (size_t)units, f)) {
+                    nn_model_free(model);
+                    fclose(f);
+                    return NULL;
+                }
+
+                if (use_bias) {
+                    if (data->biases == NULL || !read_exact(data->biases->data.f32_data, sizeof(float), (size_t)units, f)) {
+                        nn_model_free(model);
+                        fclose(f);
+                        return NULL;
+                    }
+                } else {
+                    tensor_free(data->biases);
+                    data->biases = NULL;
+                }
+            }
+        }
+
         fclose(f);
-        return NULL;
+        return model;
     }
-    
-    NNModel* model = nn_model_new(name);
-    if (model == NULL) {
-        fclose(f);
-        return NULL;
-    }
-    
-    /* Read layer count */
-    fread(&model->layer_count, sizeof(int), 1, f);
-    
-    /* Read learning rate */
-    fread(&model->learning_rate, sizeof(double), 1, f);
-    
-    /* Note: Full implementation would load each layer's weights */
-    
-    fclose(f);
-    return model;
 }
 
 /**
@@ -1787,9 +2496,6 @@ void nn_model_free(NNModel* model) {
     
     free(model->layers);
     free(model->name);
-    tensor_free(model->input);
-    tensor_free(model->output);
-    tensor_free(model->loss);
     free(model);
 }
 
@@ -1870,7 +2576,7 @@ bool nn_model_export_onnx(NNModel* model, const char* filepath) {
                 fwrite(&w->shape[0], sizeof(int), 1, f);
                 fwrite(&w->shape[1], sizeof(int), 1, f);
                 int total_elements = w->shape[0] * w->shape[1];
-                fwrite(w->data.f64_data, sizeof(double), total_elements, f);
+                fwrite(w->data.f32_data, sizeof(float), total_elements, f);
             }
             
             /* Write bias shape and data */
@@ -1880,7 +2586,7 @@ bool nn_model_export_onnx(NNModel* model, const char* filepath) {
             if (has_bias && data->biases != NULL) {
                 Tensor* b = data->biases;
                 fwrite(&b->shape[0], sizeof(int), 1, f);
-                fwrite(b->data.f64_data, sizeof(double), b->shape[0], f);
+                fwrite(b->data.f32_data, sizeof(float), b->shape[0], f);
             }
         } else {
             /* No weights for other layer types */
@@ -1940,8 +2646,9 @@ NNModel* nn_model_import_onnx(const char* filepath) {
         return NULL;
     }
     
-    /* Read layer count */
-    fread(&model->layer_count, sizeof(int), 1, f);
+    /* Read layer count from file; model starts with layer_count = 0 */
+    int file_layer_count = 0;
+    fread(&file_layer_count, sizeof(int), 1, f);
     
     /* Skip IR version */
     int64_t ir_version;
@@ -1954,11 +2661,8 @@ NNModel* nn_model_import_onnx(const char* filepath) {
     fread(&pver_len, sizeof(uint32_t), 1, f);
     fseek(f, pver_len, SEEK_CUR);
     
-    /* Allocate layers array */
-    model->layers = calloc(model->layer_count, sizeof(Layer*));
-    
     /* Read each layer */
-    for (int i = 0; i < model->layer_count; i++) {
+    for (int i = 0; i < file_layer_count; i++) {
         int layer_type, activation;
         fread(&layer_type, sizeof(int), 1, f);
         fread(&activation, sizeof(int), 1, f);
@@ -1974,12 +2678,12 @@ NNModel* nn_model_import_onnx(const char* filepath) {
             fread(&w_cols, sizeof(int), 1, f);
             
             int total_elements = w_rows * w_cols;
-            double* weight_data = malloc(sizeof(double) * total_elements);
-            fread(weight_data, sizeof(double), total_elements, f);
+            float* weight_data = malloc(sizeof(float) * total_elements);
+            fread(weight_data, sizeof(float), total_elements, f);
             
             int shape[2] = {w_rows, w_cols};
-            weights = tensor_new(TENSOR_FLOAT64, 2, shape);
-            memcpy(weights->data.f64_data, weight_data, sizeof(double) * total_elements);
+            weights = tensor_new(TENSOR_FLOAT32, 2, shape);
+            memcpy(weights->data.f32_data, weight_data, sizeof(float) * total_elements);
             free(weight_data);
         }
         
@@ -1992,29 +2696,34 @@ NNModel* nn_model_import_onnx(const char* filepath) {
             int b_dim;
             fread(&b_dim, sizeof(int), 1, f);
             
-            double* bias_data = malloc(sizeof(double) * b_dim);
-            fread(bias_data, sizeof(double), b_dim, f);
+            float* bias_data = malloc(sizeof(float) * b_dim);
+            fread(bias_data, sizeof(float), b_dim, f);
             
             int shape[1] = {b_dim};
-            biases = tensor_new(TENSOR_FLOAT64, 1, shape);
-            memcpy(biases->data.f64_data, bias_data, sizeof(double) * b_dim);
+            biases = tensor_new(TENSOR_FLOAT32, 1, shape);
+            memcpy(biases->data.f32_data, bias_data, sizeof(float) * b_dim);
             free(bias_data);
         }
         
         /* Create layer with loaded weights */
         if (layer_type == LAYER_DENSE && weights != NULL) {
             int output_dim = weights->shape[1];
-            nn_model_add_dense(model, output_dim, activation);
+            nn_model_add_dense(model, output_dim, activation, weights->shape[0]);
             
             /* Copy loaded weights to the layer */
-            if (model->layers[i] != NULL && model->layers[i]->layer_data != NULL) {
-                DenseLayerData* data = (DenseLayerData*)model->layers[i]->layer_data;
+            if (model->layer_count > 0 && model->layers[model->layer_count - 1] != NULL && model->layers[model->layer_count - 1]->layer_data != NULL) {
+                DenseLayerData* data = (DenseLayerData*)model->layers[model->layer_count - 1]->layer_data;
                 if (data->weights != NULL) tensor_free(data->weights);
                 data->weights = weights;
                 if (data->biases != NULL) tensor_free(data->biases);
                 data->biases = biases;
+                weights = NULL;
+                biases = NULL;
             }
         }
+
+        tensor_free(weights);
+        tensor_free(biases);
     }
     
     fclose(f);
@@ -2058,8 +2767,13 @@ void* optimizer_create(OptimizerType type, double lr) {
         }
         
         case OPTIMIZER_RMSPROP: {
-            fprintf(stderr, "[OPTIMIZER] RMSprop not fully implemented\n");
-            return NULL;
+            RMSpropOptimizer* opt = (RMSpropOptimizer*)malloc(sizeof(RMSpropOptimizer));
+            if (opt == NULL) return NULL;
+            opt->lr = lr;
+            opt->rho = 0.9;
+            opt->epsilon = 1e-8;
+            opt->avg_sq_grad = NULL;
+            return opt;
         }
         
         default:
@@ -2081,67 +2795,65 @@ void optimizer_update(void* opt, OptimizerType type, Tensor* param, Tensor* grad
     switch (type) {
         case OPTIMIZER_SGD: {
             SGDOptimizer* sgd = (SGDOptimizer*)opt;
-            /* param -= learning_rate * grad */
-            tensor_imul_scalar(grad, sgd->lr);
-            tensor_isub(param, grad);
+            if (!tensor_same_shape(param, grad) || param->dtype != TENSOR_FLOAT32 || grad->dtype != TENSOR_FLOAT32) break;
+            for (size_t i = 0; i < param->size; i++) {
+                param->data.f32_data[i] -= (float)(sgd->lr * (double)grad->data.f32_data[i]);
+            }
             break;
         }
         
         case OPTIMIZER_ADAM: {
             AdamOptimizer* adam = (AdamOptimizer*)opt;
+            if (!tensor_same_shape(param, grad) || param->dtype != TENSOR_FLOAT32 || grad->dtype != TENSOR_FLOAT32) break;
+            if (adam->m == NULL || !tensor_same_shape(adam->m, grad)) {
+                tensor_free(adam->m);
+                adam->m = tensor_zeros_like(grad);
+            }
+            if (adam->v == NULL || !tensor_same_shape(adam->v, grad)) {
+                tensor_free(adam->v);
+                adam->v = tensor_zeros_like(grad);
+            }
+            if (adam->m == NULL || adam->v == NULL) break;
             adam->t++;
-            
-            /* Update biased first moment estimate */
-            /* m = beta1 * m + (1 - beta1) * grad */
-            if (adam->m == NULL) {
-                adam->m = tensor_clone(grad);
-            } else {
-                tensor_imul_scalar(adam->m, adam->beta1);
-                Tensor* grad_scaled = tensor_clone(grad);
-                tensor_imul_scalar(grad_scaled, 1.0 - adam->beta1);
-                tensor_iadd(adam->m, grad_scaled);
-                tensor_free(grad_scaled);
+
+            {
+                double bias_correction1 = 1.0 - pow(adam->beta1, adam->t);
+                double bias_correction2 = 1.0 - pow(adam->beta2, adam->t);
+                if (fabs(bias_correction1) < 1e-12) bias_correction1 = 1.0;
+                if (fabs(bias_correction2) < 1e-12) bias_correction2 = 1.0;
+
+                for (size_t i = 0; i < param->size; i++) {
+                    double g = (double)grad->data.f32_data[i];
+                    double m = adam->beta1 * (double)adam->m->data.f32_data[i] + (1.0 - adam->beta1) * g;
+                    double v = adam->beta2 * (double)adam->v->data.f32_data[i] + (1.0 - adam->beta2) * g * g;
+                    double m_hat = m / bias_correction1;
+                    double v_hat = v / bias_correction2;
+
+                    adam->m->data.f32_data[i] = (float)m;
+                    adam->v->data.f32_data[i] = (float)v;
+                    param->data.f32_data[i] -= (float)(adam->lr * m_hat / (sqrt(v_hat) + adam->epsilon));
+                }
             }
-            
-            /* Update biased second moment estimate */
-            /* v = beta2 * v + (1 - beta2) * grad^2 */
-            if (adam->v == NULL) {
-                adam->v = tensor_clone(grad);
-                tensor_imul_scalar(adam->v, tensor_sum(grad)); /* Simplified */
-            } else {
-                tensor_imul_scalar(adam->v, adam->beta2);
-                Tensor* grad_squared = tensor_clone(grad);
-                tensor_imul(grad_squared, grad);
-                tensor_imul_scalar(grad_squared, 1.0 - adam->beta2);
-                tensor_iadd(adam->v, grad_squared);
-                tensor_free(grad_squared);
-            }
-            
-            /* Compute bias-corrected estimates */
-            Tensor* m_hat = tensor_clone(adam->m);
-            tensor_imul_scalar(m_hat, 1.0 / (1.0 - pow(adam->beta1, adam->t)));
-            
-            Tensor* v_hat = tensor_clone(adam->v);
-            tensor_imul_scalar(v_hat, 1.0 / (1.0 - pow(adam->beta2, adam->t)));
-            
-            /* Update parameters: param -= lr * m_hat / (sqrt(v_hat) + epsilon) */
-            Tensor* update = tensor_clone(v_hat);
-            for (size_t i = 0; i < update->size; i++) {
-                update->data.f32_data[i] = sqrt(update->data.f32_data[i]) + adam->epsilon;
-            }
-            tensor_idiv(m_hat, update);
-            tensor_imul_scalar(m_hat, adam->lr);
-            tensor_isub(param, m_hat);
-            
-            tensor_free(m_hat);
-            tensor_free(v_hat);
-            tensor_free(update);
             break;
         }
         
-        case OPTIMIZER_RMSPROP:
-            /* Not implemented */
+        case OPTIMIZER_RMSPROP: {
+            RMSpropOptimizer* rmsprop = (RMSpropOptimizer*)opt;
+            if (!tensor_same_shape(param, grad) || param->dtype != TENSOR_FLOAT32 || grad->dtype != TENSOR_FLOAT32) break;
+            if (rmsprop->avg_sq_grad == NULL || !tensor_same_shape(rmsprop->avg_sq_grad, grad)) {
+                tensor_free(rmsprop->avg_sq_grad);
+                rmsprop->avg_sq_grad = tensor_zeros_like(grad);
+            }
+            if (rmsprop->avg_sq_grad == NULL) break;
+
+            for (size_t i = 0; i < param->size; i++) {
+                double g = (double)grad->data.f32_data[i];
+                double avg = rmsprop->rho * (double)rmsprop->avg_sq_grad->data.f32_data[i] + (1.0 - rmsprop->rho) * g * g;
+                rmsprop->avg_sq_grad->data.f32_data[i] = (float)avg;
+                param->data.f32_data[i] -= (float)(rmsprop->lr * g / (sqrt(avg) + rmsprop->epsilon));
+            }
             break;
+        }
     }
 }
 
@@ -2165,9 +2877,12 @@ void optimizer_free(void* opt, OptimizerType type) {
             free(adam);
             break;
         }
-        case OPTIMIZER_RMSPROP:
-            free(opt);
+        case OPTIMIZER_RMSPROP: {
+            RMSpropOptimizer* rmsprop = (RMSpropOptimizer*)opt;
+            tensor_free(rmsprop->avg_sq_grad);
+            free(rmsprop);
             break;
+        }
     }
 }
 

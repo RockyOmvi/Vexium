@@ -18,6 +18,17 @@ This extension provides syntax highlighting and language support for the Vexium 
 ## Manual Installation
 
 1. Copy this folder to `~/.vscode/extensions/` (Linux/Mac) or `%USERPROFILE%\.vscode\extensions\` (Windows)
+2. Restart VS Code (or run `Developer: Reload Window`)
+3. Open any `.vxm` file and ensure language mode is set to `Vexium`
+
+## Color Highlighting
+
+The syntax highlighter now colors:
+- Keywords and control flow (`if`, `for`, `attempt`, `otherwise`, `await`, `give back`)
+- Declarations (`let`, `const`, `struct`, `trait`, `impl`, `fn`, `can`, `task`)
+- Imports/modules (`from ... use ...` with module-name coloring)
+- Built-in functions (`display`, `len`, `str`, `tokenize`, math/time/json/http helpers)
+- Types, constants, operators, function definitions/calls, strings with interpolation, and numbers
 
 ## Language Features
 

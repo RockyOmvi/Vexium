@@ -57,6 +57,7 @@ typedef enum {
     NODE_ATTEMPT,           /* attempt/otherwise */
     NODE_PASS,              /* pass */
     NODE_UNSAFE,            /* unsafe block */
+    NODE_WITH,              /* with expr as name: body */
     NODE_BLOCK,             /* indented block of statements */
     NODE_PROGRAM            /* top-level program */
 } NodeType;
@@ -80,6 +81,7 @@ typedef struct {
     char* name;
     char* type_name;    /* NULL if no type annotation */
     ASTNode* default_value; /* NULL if no default */
+    bool is_variadic;   /* true for *args parameter */
 } Param;
 
 typedef struct {
@@ -155,10 +157,13 @@ struct ASTNode {
             NodeList args;
         } call;
 
-        /* Index: object[index] */
+        /* Index or slice: object[index] / object[start:end:step] */
         struct {
             ASTNode* object;
             ASTNode* index;
+            ASTNode* end;
+            ASTNode* step;
+            bool is_slice;
         } index_access;
 
         /* Field access: object.field */
@@ -344,6 +349,13 @@ struct ASTNode {
 
         /* yield expr */
         struct { ASTNode* expr; } yield;
+
+        /* with expr as name: body */
+        struct {
+            ASTNode* expr;    /* context manager expression */
+            char*    name;    /* binding name, NULL if omitted */
+            ASTNode* body;
+        } with_stmt;
 
         /* Program (top-level) */
         struct { NodeList statements; } program;

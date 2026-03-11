@@ -1,25 +1,18 @@
 {
-  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Vexium",
   "patterns": [
-    {
-      "include": "#comments"
-    },
-    {
-      "include": "#strings"
-    },
-    {
-      "include": "#numbers"
-    },
-    {
-      "include": "#keywords"
-    },
-    {
-      "include": "#operators"
-    },
-    {
-      "include": "#identifiers"
-    }
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#imports" },
+    { "include": "#declarations" },
+    { "include": "#functions" },
+    { "include": "#types" },
+    { "include": "#constants" },
+    { "include": "#keywords" },
+    { "include": "#builtins" },
+    { "include": "#operators" },
+    { "include": "#identifiers" }
   ],
   "repository": {
     "comments": {
@@ -39,7 +32,7 @@
           "end": "\"",
           "patterns": [
             {
-              "name": "constant.placeholder.vexium",
+              "name": "variable.other.interpolation.vexium",
               "match": "\\{[^}]+\\}"
             }
           ]
@@ -54,7 +47,7 @@
     "numbers": {
       "patterns": [
         {
-          "name": "constant.numeric.vexium",
+          "name": "constant.numeric.float.vexium",
           "match": "\\b\\d+(\\.\\d+)?([eE][+-]?\\d+)?\\b"
         },
         {
@@ -67,23 +60,96 @@
         }
       ]
     },
+    "imports": {
+      "patterns": [
+        {
+          "name": "meta.import.vexium",
+          "match": "\\b(from)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+(use)\\b",
+          "captures": {
+            "1": { "name": "keyword.control.import.vexium" },
+            "2": { "name": "entity.name.module.vexium" },
+            "3": { "name": "keyword.control.import.vexium" }
+          }
+        },
+        {
+          "name": "keyword.control.import.vexium",
+          "match": "\\b(use|from)\\b"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "name": "meta.definition.function.vexium",
+          "match": "\\b(fn|can|task)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.function.vexium" },
+            "2": { "name": "entity.name.function.vexium" }
+          }
+        },
+        {
+          "name": "meta.definition.type.vexium",
+          "match": "\\b(struct|trait|impl)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.vexium" },
+            "2": { "name": "entity.name.type.vexium" }
+          }
+        },
+        {
+          "name": "meta.variable.declaration.vexium",
+          "match": "\\b(let|const|has)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.modifier.vexium" },
+            "2": { "name": "variable.other.definition.vexium" }
+          }
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "support.function.call.vexium",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.primitive.vexium",
+          "match": "\\b(int|float|str|string|bool|array|map|list|dict|tensor|model|task|channel|void)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.vexium",
+          "match": "\\b(true|false|nothing)\\b"
+        }
+      ]
+    },
     "keywords": {
       "patterns": [
         {
           "name": "keyword.control.vexium",
-          "match": "\\b(fn|if|elif|else|while|for|each|in|to|by|repeat|times|match|when|attempt|otherwise|give back|break|skip|pass|defer|return|defer|spawn|task|channel|send|receive|await|yield)\\b"
+          "match": "\\b(if|elif|else|while|for|each|in|to|by|repeat|times|match|when|attempt|otherwise|break|skip|pass|defer|return|spawn|send|receive|await|yield)\\b|\\bgive\\s+back\\b"
         },
         {
           "name": "keyword.declaration.vexium",
-          "match": "\\b(let|const|struct|trait|impl|has|can|use|from)\\b"
+          "match": "\\b(let|const|struct|trait|impl|has|can)\\b"
         },
         {
           "name": "keyword.operator.vexium",
-          "match": "\\b(is|is not|is greater than|is less than|is at least|is at most|and|or|not)\\b"
-        },
+          "match": "\\bis\\s+not\\b|\\bis\\s+greater\\s+than\\b|\\bis\\s+less\\s+than\\b|\\bis\\s+at\\s+least\\b|\\bis\\s+at\\s+most\\b|\\b(is|and|or|not)\\b"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
         {
-          "name": "keyword.other.vexium",
-          "match": "\\b(true|false|nothing)\\b"
+          "name": "support.function.builtin.vexium",
+          "match": "\\b(display|input|len|str|type|range|print|tokenize|sqrt|pow|min|max|abs|clock|now|sleep|parse|stringify|get|post)\\b"
         }
       ]
     },
@@ -91,7 +157,7 @@
       "patterns": [
         {
           "name": "keyword.operator.vexium",
-          "match": "([+\\-*/%=!<>]|\\*\\*|//|%%|be|<-|->|=>)"
+          "match": "\\+=|-=|\\*=|/=|%=|==|!=|<=|>=|\\*\\*|//|%%|<-|->|=>|[+\\-*/%=!<>]|\\bbe\\b"
         }
       ]
     },
@@ -102,7 +168,7 @@
           "match": "\\b[a-z_][a-zA-Z0-9_]*\\b"
         },
         {
-          "name": "entity.name.function.vexium",
+          "name": "entity.name.type.class.vexium",
           "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
         }
       ]

@@ -1,0 +1,14 @@
+{
+  "iconDefinitions": {
+    "_vexium_file": {
+      "iconPath": "./vexium-file.svg"
+    }
+  },
+  "fileExtensions": {
+    "vxm": "_vexium_file",
+    "vxmc": "_vexium_file"
+  },
+  "languageIds": {
+    "vexium": "_vexium_file"
+  }
+}

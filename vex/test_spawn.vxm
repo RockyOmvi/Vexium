@@ -1,3 +1,10 @@
-# Test spawn and channel keywords
-spawn test_fn()
+# Spawn/channel syntax smoke test
+fn test_fn():
+	display "spawned"
+	give back 42
+
+let t be spawn test_fn()
 channel ch
+
+let result be await t
+display "spawn result: " + str(result)

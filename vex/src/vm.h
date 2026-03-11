@@ -59,6 +59,8 @@ void vm_init(VM* vm);
 VM* vm_new(void);
 void vm_free(VM* vm);
 VMResult vm_run(VM* vm, ObjFunction* fn);
+VMResult vm_run_closure(VM* vm, ObjClosure* closure, Value* args, int argc);
+bool vm_clone_value_to_vm(VM* target_vm, Value input, Value* out);
 
 /* Register a native/built-in function */
 typedef Value (*NativeFn)(int argCount, Value* args);

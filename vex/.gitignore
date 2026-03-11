@@ -1,0 +1,9 @@
+# Build outputs
+vexium.exe
+*.o
+a.out
+obj/
+
+# Test-generated artifacts
+test_out.csv
+tmp_model.onnx
