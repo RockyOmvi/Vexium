@@ -1,0 +1,26 @@
+from json use parse
+from json use stringify
+
+display "=== JSON MODULE TEST ==="
+
+let arr be parse("[1,2,3]")
+display arr[1]
+display stringify(arr)
+
+let nested be parse("[[1,2],[3,4]]")
+display nested[0][1]
+display nested[1][0]
+
+let bad_array be parse("[1,2,]")
+if bad_array is nothing:
+    display "bad-array-rejected"
+else:
+    display "bad-array-accepted"
+
+let trailing_garbage be parse("truex")
+if trailing_garbage is nothing:
+    display "trailing-garbage-rejected"
+else:
+    display "trailing-garbage-accepted"
+
+display "JSON MODULE PASS"

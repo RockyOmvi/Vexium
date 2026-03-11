@@ -13,12 +13,31 @@ typedef struct {
     const char* start;
     const char* current;
     int line;
+    bool had_error;
 } JsonParser;
 
 static void json_init_parser(JsonParser* parser, const char* json) {
     parser->start = json;
     parser->current = json;
     parser->line = 1;
+    parser->had_error = false;
+}
+
+static void json_set_error(JsonParser* parser) {
+    parser->had_error = true;
+}
+
+static bool json_is_at_end(JsonParser* parser) {
+    return *parser->current == '\0';
+}
+
+static char json_peek_next(JsonParser* parser) {
+    if (json_is_at_end(parser)) return '\0';
+    return parser->current[1];
+}
+
+static bool json_is_delimiter(char c) {
+    return c == '\0' || c == ',' || c == ']' || c == '}' || isspace((unsigned char)c);
 }
 
 static void json_skip_whitespace(JsonParser* parser) {
@@ -71,11 +90,32 @@ static Value json_parse_string(JsonParser* parser) {
     while (json_peek(parser) != '"' && json_peek(parser) != '\0') {
         if (json_peek(parser) == '\\') {
             json_advance(parser);
-            if (json_peek(parser) != '\0') json_advance(parser);
+            if (json_peek(parser) == '\0') {
+                json_set_error(parser);
+                return val_nothing_v();
+            }
+
+            char escape = json_advance(parser);
+            if (escape == 'u') {
+                for (int j = 0; j < 4; j++) {
+                    if (!isxdigit((unsigned char)json_peek(parser))) {
+                        json_set_error(parser);
+                        return val_nothing_v();
+                    }
+                    json_advance(parser);
+                }
+                len += 6;
+                continue;
+            }
         } else {
             json_advance(parser);
         }
         len++;
+    }
+
+    if (json_peek(parser) != '"') {
+        json_set_error(parser);
+        return val_nothing_v();
     }
     
     /* Allocate and copy */
@@ -87,6 +127,11 @@ static Value json_parse_string(JsonParser* parser) {
     while (json_peek(parser) != '"' && json_peek(parser) != '\0') {
         if (json_peek(parser) == '\\') {
             json_advance(parser);
+            if (json_peek(parser) == '\0') {
+                json_set_error(parser);
+                free(result);
+                return val_nothing_v();
+            }
             char escape = json_advance(parser);
             switch (escape) {
                 case '"': result[i++] = '"'; break;
@@ -98,10 +143,15 @@ static Value json_parse_string(JsonParser* parser) {
                 case 'r': result[i++] = '\r'; break;
                 case 't': result[i++] = '\t'; break;
                 case 'u': {
-                    /* Unicode escape - simplified: just copy as-is */
+                    /* Unicode escape - simplified: preserve as literal \uXXXX */
                     result[i++] = '\\';
                     result[i++] = 'u';
-                    for (int j = 0; j < 4 && isxdigit(json_peek(parser)); j++) {
+                    for (int j = 0; j < 4; j++) {
+                        if (!isxdigit((unsigned char)json_peek(parser))) {
+                            json_set_error(parser);
+                            free(result);
+                            return val_nothing_v();
+                        }
                         result[i++] = json_advance(parser);
                     }
                     break;
@@ -112,6 +162,13 @@ static Value json_parse_string(JsonParser* parser) {
             result[i++] = json_advance(parser);
         }
     }
+
+    if (json_peek(parser) != '"') {
+        json_set_error(parser);
+        free(result);
+        return val_nothing_v();
+    }
+
     result[i] = '\0';
     
     /* Consume closing quote */
@@ -129,26 +186,47 @@ static Value json_parse_number(JsonParser* parser) {
     
     /* Optional minus */
     if (json_peek(parser) == '-') json_advance(parser);
+    if (!isdigit((unsigned char)json_peek(parser))) {
+        json_set_error(parser);
+        return val_nothing_v();
+    }
     
     /* Integer part */
-    while (isdigit(json_peek(parser))) json_advance(parser);
+    while (isdigit((unsigned char)json_peek(parser))) json_advance(parser);
     
     /* Fractional part */
-    if (json_peek(parser) == '.' && isdigit(parser->current[1])) {
+    if (json_peek(parser) == '.') {
+        if (!isdigit((unsigned char)json_peek_next(parser))) {
+            json_set_error(parser);
+            return val_nothing_v();
+        }
         json_advance(parser);
-        while (isdigit(json_peek(parser))) json_advance(parser);
+        while (isdigit((unsigned char)json_peek(parser))) json_advance(parser);
     }
     
     /* Exponent */
     if (json_peek(parser) == 'e' || json_peek(parser) == 'E') {
         json_advance(parser);
         if (json_peek(parser) == '+' || json_peek(parser) == '-') json_advance(parser);
-        while (isdigit(json_peek(parser))) json_advance(parser);
+        if (!isdigit((unsigned char)json_peek(parser))) {
+            json_set_error(parser);
+            return val_nothing_v();
+        }
+        while (isdigit((unsigned char)json_peek(parser))) json_advance(parser);
+    }
+
+    if (!json_is_delimiter(json_peek(parser))) {
+        json_set_error(parser);
+        return val_nothing_v();
     }
     
     /* Convert to number */
     size_t len = parser->current - start;
     char* num_str = (char*)malloc(len + 1);
+    if (!num_str) {
+        json_set_error(parser);
+        return val_nothing_v();
+    }
     memcpy(num_str, start, len);
     num_str[len] = '\0';
     
@@ -162,6 +240,11 @@ static Value json_parse_number(JsonParser* parser) {
     
     /* Float */
     double float_val = strtod(num_str, &end);
+    if (*end != '\0') {
+        free(num_str);
+        json_set_error(parser);
+        return val_nothing_v();
+    }
     free(num_str);
     return val_number(float_val);
 }
@@ -190,12 +273,17 @@ static Value json_parse_array(JsonParser* parser) {
         
         json_skip_whitespace(parser);
         if (json_match(parser, ',')) {
+            json_skip_whitespace(parser);
+            if (json_peek(parser) == ']') {
+                json_set_error(parser);
+                return val_nothing_v();
+            }
             continue;
         } else if (json_match(parser, ']')) {
             break;
         } else {
-            /* Error: expected , or ] */
-            break;
+            json_set_error(parser);
+            return val_nothing_v();
         }
     }
     
@@ -219,16 +307,16 @@ static Value json_parse_object(JsonParser* parser) {
         
         /* Parse key (must be string) */
         if (json_peek(parser) != '"') {
-            /* Error: expected string key */
-            break;
+            json_set_error(parser);
+            return val_nothing_v();
         }
         
         Value key = json_parse_string(parser);
         
         json_skip_whitespace(parser);
         if (!json_match(parser, ':')) {
-            /* Error: expected : */
-            break;
+            json_set_error(parser);
+            return val_nothing_v();
         }
         
         json_skip_whitespace(parser);
@@ -241,12 +329,17 @@ static Value json_parse_object(JsonParser* parser) {
         
         json_skip_whitespace(parser);
         if (json_match(parser, ',')) {
+            json_skip_whitespace(parser);
+            if (json_peek(parser) == '}') {
+                json_set_error(parser);
+                return val_nothing_v();
+            }
             continue;
         } else if (json_match(parser, '}')) {
             break;
         } else {
-            /* Error: expected , or } */
-            break;
+            json_set_error(parser);
+            return val_nothing_v();
         }
     }
     
@@ -264,19 +357,19 @@ static Value json_parse_value(JsonParser* parser) {
         case '[': return json_parse_array(parser);
         case '{': return json_parse_object(parser);
         case 't':
-            if (strncmp(parser->current, "true", 4) == 0) {
+            if (strncmp(parser->current, "true", 4) == 0 && json_is_delimiter(parser->current[4])) {
                 parser->current += 4;
                 return val_bool(true);
             }
             break;
         case 'f':
-            if (strncmp(parser->current, "false", 5) == 0) {
+            if (strncmp(parser->current, "false", 5) == 0 && json_is_delimiter(parser->current[5])) {
                 parser->current += 5;
                 return val_bool(false);
             }
             break;
         case 'n':
-            if (strncmp(parser->current, "null", 4) == 0) {
+            if (strncmp(parser->current, "null", 4) == 0 && json_is_delimiter(parser->current[4])) {
                 parser->current += 4;
                 return val_nothing_v();
             }
@@ -298,7 +391,12 @@ static Value json_parse_value(JsonParser* parser) {
 Value json_parse_string_value(const char* json_str) {
     JsonParser parser;
     json_init_parser(&parser, json_str);
-    return json_parse_value(&parser);
+    Value value = json_parse_value(&parser);
+    json_skip_whitespace(&parser);
+    if (parser.had_error || !json_is_at_end(&parser)) {
+        return val_nothing_v();
+    }
+    return value;
 }
 
 /* ══════════════════════════════════════════════════════════════

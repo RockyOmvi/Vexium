@@ -1,0 +1,16 @@
+from time use now
+from time use format
+from time use sleep
+from time use clock
+
+display "=== TIME MODULE TEST ==="
+
+let stamp be now()
+display type(stamp)
+display format(0, "%Y")
+
+sleep(0)
+
+let c be clock()
+display type(c)
+display "TIME MODULE PASS"

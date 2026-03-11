@@ -71,6 +71,7 @@ static char* token_string_content(Token tok) {
 static ASTNode* parse_expression(Parser* p);
 static ASTNode* parse_statement(Parser* p);
 static ASTNode* parse_block(Parser* p);
+static ASTNode* parse_give_back(Parser* p);
 
 /* ══════════════════════════════════════════════════════════════
  *  EXPRESSION PARSING (Pratt / precedence climbing)
@@ -78,6 +79,42 @@ static ASTNode* parse_block(Parser* p);
 
 /* ── Primary expressions ── */
 static ASTNode* parse_primary(Parser* p) {
+    /* Await expression: await expr */
+    if (match_token(p, TOKEN_AWAIT)) {
+        Token kw = p->previous;
+        ASTNode* node = ast_new_node(NODE_AWAIT, kw.line, kw.column);
+        node->as.await.expr = parse_expression(p);
+        return node;
+    }
+
+    /* Yield expression: yield expr */
+    if (match_token(p, TOKEN_YIELD)) {
+        Token kw = p->previous;
+        ASTNode* node = ast_new_node(NODE_YIELD, kw.line, kw.column);
+        node->as.yield.expr = parse_expression(p);
+        return node;
+    }
+
+    /* Channel create: channel() or channel(<capacity>) */
+    if (match_token(p, TOKEN_CHANNEL)) {
+        Token kw = p->previous;
+        ASTNode* node = ast_new_node(NODE_CHANNEL_CREATE, kw.line, kw.column);
+        node->as.channel_create.capacity = 0;
+        consume(p, TOKEN_LPAREN, "Expected '(' after 'channel'");
+        if (!check(p, TOKEN_RPAREN)) {
+            if (match_token(p, TOKEN_INT)) {
+                char* text = token_text(p->previous);
+                node->as.channel_create.capacity = (int)strtol(text, NULL, 10);
+                free(text);
+            } else {
+                /* Capacity expression is not currently compiled into opcode args. */
+                parse_expression(p);
+            }
+        }
+        consume(p, TOKEN_RPAREN, "Expected ')' after channel arguments");
+        return node;
+    }
+
     /* Integer literal */
     if (match_token(p, TOKEN_INT)) {
         ASTNode* node = ast_new_node(NODE_INT_LITERAL,
@@ -147,6 +184,43 @@ static ASTNode* parse_primary(Parser* p) {
         ASTNode* node = ast_new_node(NODE_IDENTIFIER,
             p->previous.line, p->previous.column);
         node->as.identifier.name = token_text(p->previous);
+        return node;
+    }
+
+    /* Anonymous function expression: fn(params): expr */
+    if (match_token(p, TOKEN_FN)) {
+        Token kw = p->previous;
+        consume(p, TOKEN_LPAREN, "Expected '(' after 'fn'");
+
+        ParamList params;
+        paramlist_init(&params);
+        if (!check(p, TOKEN_RPAREN)) {
+            do {
+                Token pname = consume(p, TOKEN_IDENTIFIER, "Expected parameter name");
+                char* ptype = NULL;
+                if (match_token(p, TOKEN_COLON)) {
+                    Token pt = consume(p, TOKEN_IDENTIFIER, "Expected parameter type");
+                    ptype = token_text(pt);
+                }
+                paramlist_add(&params, token_text(pname), ptype);
+                if (ptype) free(ptype);
+            } while (match_token(p, TOKEN_COMMA));
+        }
+        consume(p, TOKEN_RPAREN, "Expected ')' after parameters");
+        consume(p, TOKEN_COLON, "Expected ':' after anonymous function signature");
+
+        ASTNode* body = NULL;
+        if (check(p, TOKEN_NEWLINE)) {
+            body = parse_block(p);
+        } else if (match_token(p, TOKEN_GIVE_BACK)) {
+            body = parse_give_back(p);
+        } else {
+            body = parse_expression(p);
+        }
+
+        ASTNode* node = ast_new_node(NODE_LAMBDA, kw.line, kw.column);
+        node->as.lambda.params = params;
+        node->as.lambda.body = body;
         return node;
     }
 
@@ -258,13 +332,16 @@ static ASTNode* parse_primary(Parser* p) {
         /* Check for list comprehension: [expr for each x in iterable] */
         if (check(p, TOKEN_FOR)) {
             advance_token(p); /* consume 'for' */
-            consume(p, TOKEN_EACH, "Expected 'each' after 'for' in comprehension");
+            /* Support both 'for each x in ...' and 'for x in ...' */
+            if (check(p, TOKEN_EACH)) {
+                advance_token(p);
+            }
             Token var = consume(p, TOKEN_IDENTIFIER, "Expected variable in comprehension");
             consume(p, TOKEN_IN, "Expected 'in' in comprehension");
             ASTNode* iterable = parse_expression(p);
 
             ASTNode* condition = NULL;
-            if (match_token(p, TOKEN_IF)) {
+            if (match_token(p, TOKEN_IF) || match_token(p, TOKEN_WHERE)) {
                 condition = parse_expression(p);
             }
             consume(p, TOKEN_RBRACKET, "Expected ']' after comprehension");
@@ -582,6 +659,19 @@ static ASTNode* parse_for(Parser* p) {
     Token var = consume(p, TOKEN_IDENTIFIER, "Expected variable name");
     consume(p, TOKEN_IN, "Expected 'in' after variable name");
     ASTNode* start = parse_expression(p);
+
+    /* Support shorthand for-each: for item in iterable: */
+    if (!check(p, TOKEN_TO)) {
+        consume(p, TOKEN_COLON, "Expected ':' after for-each");
+        ASTNode* body = parse_block(p);
+
+        ASTNode* node = ast_new_node(NODE_FOR_EACH, kw.line, kw.column);
+        node->as.for_each.var_name = token_text(var);
+        node->as.for_each.iterable = start;
+        node->as.for_each.body = body;
+        return node;
+    }
+
     consume(p, TOKEN_TO, "Expected 'to' in for range");
     ASTNode* end = parse_expression(p);
 
@@ -829,9 +919,31 @@ static ASTNode* parse_match(Parser* p) {
     skip_newlines(p);
 
     while (!check(p, TOKEN_DEDENT) && !check(p, TOKEN_EOF)) {
-        ASTNode* pattern = parse_expression(p);
-        consume(p, TOKEN_FAT_ARROW, "Expected '=>' after match pattern");
-        ASTNode* body = parse_statement(p);
+        skip_newlines(p);
+        if (check(p, TOKEN_DEDENT) || check(p, TOKEN_EOF)) break;
+
+        ASTNode* pattern = NULL;
+
+        if (match_token(p, TOKEN_WHEN)) {
+            pattern = parse_expression(p);
+        } else if (match_token(p, TOKEN_OTHERWISE)) {
+            pattern = ast_new_node(NODE_NOTHING_LITERAL, p->previous.line, p->previous.column);
+        } else {
+            pattern = parse_expression(p);
+        }
+
+        if (check(p, TOKEN_FAT_ARROW)) {
+            advance_token(p);
+        } else {
+            consume(p, TOKEN_COLON, "Expected ':' after match arm");
+        }
+
+        ASTNode* body = NULL;
+        if (check(p, TOKEN_NEWLINE)) {
+            body = parse_block(p);
+        } else {
+            body = parse_statement(p);
+        }
 
         /* Grow arms */
         if (node->as.match_stmt.arms.count >= node->as.match_stmt.arms.capacity) {
@@ -1004,6 +1116,7 @@ static ASTNode* parse_statement(Parser* p) {
 
     /* fn */
     if (match_token(p, TOKEN_FN))      return parse_fn(p);
+    if (match_token(p, TOKEN_CAN))     return parse_fn(p);
 
     /* give back */
     if (match_token(p, TOKEN_GIVE_BACK)) return parse_give_back(p);

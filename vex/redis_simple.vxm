@@ -26,8 +26,8 @@ fn redis_set(key, value):
     if idx >= 0:
         set redis_values[idx] be value
     else:
-        append key to redis_keys
-        append value to redis_values
+        push(redis_keys, key)
+        push(redis_values, value)
     give back "OK"
 
 fn redis_get(key):
@@ -65,8 +65,8 @@ fn find_list_index(name):
 fn redis_lpush(name, value):
     let idx be find_list_index(name)
     if idx < 0:
-        append name to list_names
-        append [] to list_data
+        push(list_names, name)
+        push(list_data, [])
         let new_idx be 0
         for each lst in list_data:
             set new_idx be new_idx + 1
@@ -75,7 +75,7 @@ fn redis_lpush(name, value):
     let new_list be [value]
     let old_list be list_data[idx]
     for each item in old_list:
-        append item to new_list
+        push(new_list, item)
     set list_data[idx] be new_list
     
     let count be 0
@@ -86,15 +86,14 @@ fn redis_lpush(name, value):
 fn redis_rpush(name, value):
     let idx be find_list_index(name)
     if idx < 0:
-        append name to list_names
-        append [] to list_data
+        push(list_names, name)
+        push(list_data, [])
         let new_idx be 0
         for each lst in list_data:
             set new_idx be new_idx + 1
         set idx be new_idx - 1
     
-    append value to list_data[idx]
-    
+    push(list_data[idx], value)
     let count be 0
     for each item in list_data[idx]:
         set count be count + 1
@@ -116,7 +115,7 @@ fn redis_lpop(name):
     let new_list be []
     let i be 1
     while i < lst_len:
-        append lst[i] to new_list
+        push(new_list, lst[i])
         set i be i + 1
     set list_data[idx] be new_list
     give back val
@@ -138,7 +137,7 @@ fn redis_rpop(name):
     let new_list be []
     let i be 0
     while i < last_idx:
-        append lst[i] to new_list
+        push(new_list, lst[i])
         set i be i + 1
     set list_data[idx] be new_list
     give back val
@@ -170,7 +169,7 @@ fn redis_lrange(name, start, stop):
     let i be start
     while i < end:
         if i >= 0 and i < lst_len:
-            append lst[i] to result
+            push(result, lst[i])
         set i be i + 1
     give back result
 

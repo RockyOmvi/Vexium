@@ -194,7 +194,9 @@ static DWORD WINAPI task_worker(LPVOID arg) {
         if (result == VM_OK) {
             task->state = TASK_COMPLETED;
             task->has_result = true;
-            task->result = val_nothing_v();
+            task->result = ((VM*)task->vm)->has_last_result
+                ? ((VM*)task->vm)->last_result
+                : val_nothing_v();
         } else {
             task->state = TASK_FAILED;
             task->has_error = true;

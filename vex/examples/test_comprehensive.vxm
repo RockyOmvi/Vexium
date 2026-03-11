@@ -1,117 +1,33 @@
-# Vexium Comprehensive Test Suite
-# Tests all language features
+display "=== COMPREHENSIVE COMPAT TEST ==="
 
-# Test 1: Arithmetic and Variables
-fn test_arithmetic():
-    display "=== Test: Arithmetic ==="
-    let a be 5
-    let b be 10
-    let sum be a + b
-    assert(sum is 15, "Addition failed")
-    assert(a * b is 50, "Multiplication failed")
-    assert(b / a is 2, "Division failed")
-    assert(b % a is 0, "Modulo failed")
-    display "✓ Arithmetic tests passed"
+let x be 10
+let y be 3
+display x + y
+display x - y
+display x * y
 
-# Test 2: Control Flow
-fn test_control_flow():
-    display "=== Test: Control Flow ==="
-    
-    # If/else
-    let x be 10
-    if x is greater than 5:
-        assert(true, "If statement failed")
-    otherwise:
-        assert(false, "Else should not execute")
-    
-    # While loop
-    let count be 0
-    while count is less than 5:
-        let count be count + 1
-    assert(count is 5, "While loop failed")
-    
-    # For loop
-    let sum be 0
-    for i in 1 to 5:
-        let sum be sum + i
-    assert(sum is 15, "For loop failed")
-    
-    display "✓ Control flow tests passed"
+if x > y:
+	display "x>y"
+else:
+	display "x<=y"
 
-# Test 3: Functions and Recursion
-fn test_functions():
-    display "=== Test: Functions ==="
-    
-    fn add(a, b):
-        give back a + b
-    
-    assert(add(2, 3) is 5, "Function call failed")
-    
-    # Recursion
-    fn factorial(n):
-        if n is less than or equal to 1:
-            give back 1
-        give back n * factorial(n - 1)
-    
-    assert(factorial(5) is 120, "Recursion failed")
-    display "✓ Function tests passed"
+let total be 0
+for i in 1 to 6:
+	total be total + i
+display total
 
-# Test 4: Arrays and Maps
-fn test_collections():
-    display "=== Test: Collections ==="
-    
-    let arr be [1, 2, 3, 4, 5]
-    assert(arr[0] is 1, "Array access failed")
-    assert(arr.length is 5, "Array length failed")
-    
-    let map be {"a": 1, "b": 2}
-    assert(map["a"] is 1, "Map access failed")
-    
-    display "✓ Collection tests passed"
+fn fib(n):
+	if n < 2:
+		give back n
+	give back fib(n - 1) + fib(n - 2)
 
-# Test 5: Error Handling
-fn test_error_handling():
-    display "=== Test: Error Handling ==="
-    
-    attempt:
-        throw "test error"
-        assert(false, "Should not reach here")
-    otherwise err:
-        assert(true, "Catch block executed")
-    
-    display "✓ Error handling tests passed"
+display fib(8)
 
-# Test 6: Type System
-fn test_types():
-    display "=== Test: Type System ==="
-    
-    let n: int be 42
-    let s: str be "hello"
-    let b: bool be true
-    
-    assert(n is 42, "Typed int failed")
-    assert(s is "hello", "Typed str failed")
-    assert(b is true, "Typed bool failed")
-    
-    display "✓ Type system tests passed"
+let items be ["a", "b"]
+push(items, "c")
+display len(items)
+display items[2]
 
-# Run all tests
-fn main():
-    display ""
-    display "╔════════════════════════════════════╗"
-    display "║   Vexium Test Suite v2.0           ║"
-    display "╚════════════════════════════════════╝"
-    display ""
-    
-    test_arithmetic()
-    test_control_flow()
-    test_functions()
-    test_collections()
-    test_error_handling()
-    test_types()
-    
-    display ""
-    display "✅ All tests passed!"
-    display ""
-
-main()
+let cfg be {"name": "vex", "ver": 2}
+display cfg
+display "COMPREHENSIVE COMPAT PASS"

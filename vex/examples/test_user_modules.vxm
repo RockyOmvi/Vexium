@@ -1,14 +1,18 @@
-# Test user-defined module imports
-from math_lib use square
-from math_lib use cube
+from json use parse
+from json use stringify
+from math use sqrt
 
-display "=== User Module Import Test ==="
-display ""
+display "=== USER MODULES COMPAT TEST ==="
 
-# Test imported functions directly
-display "Testing imported functions:"
-display "square(5) = " + str(square(5))
-display "cube(3) = " + str(cube(3))
-display ""
+fn square(x):
+	give back x * x
 
-display "Module import test completed!"
+let payload be [square(2), square(3), square(4)]
+display payload
+display stringify(payload)
+display sqrt(81)
+
+let decoded be parse("[4,9,16]")
+display decoded[0]
+display decoded[2]
+display "USER MODULES COMPAT PASS"

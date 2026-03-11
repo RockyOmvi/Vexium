@@ -14,6 +14,7 @@ static void stdlib_register(const char* module, const char* name, void* fn) {
 }
 
 #include "stdlib.h"
+#include "interpreter.h"
 #include <math.h>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -696,7 +697,7 @@ static VexValue util_zip(VexValue* args, int argc) {
     
     for (int i = 0; i < count; i++) {
         if (args[i].type != VAL_STRING) continue;
-        lists[i] = strdup(args[i].as.string_val.data);
+        lists[i] = safe_strdup(args[i].as.string_val.data);
     }
     
     // This is a simplified version - real implementation would be more complex

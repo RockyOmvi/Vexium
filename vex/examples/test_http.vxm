@@ -1,0 +1,18 @@
+from http use get
+from http use post
+
+display "=== HTTP MODULE TEST ==="
+
+# get() with a bad URL returns nothing — no crash
+let r1 be get("not-a-url")
+display (r1 is nothing)
+
+# get() with an unreachable address also returns nothing — no crash
+let r2 be get("http://0.0.0.0/")
+display (r2 is nothing)
+
+# post() with a bad URL returns nothing — no crash
+let r3 be post("not-a-url", "body=1")
+display (r3 is nothing)
+
+display "HTTP MODULE PASS"

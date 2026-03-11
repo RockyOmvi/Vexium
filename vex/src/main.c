@@ -7,6 +7,7 @@
 #include "compiler.h"
 #include "type_system.h"
 #include "vm.h"
+#include "package.h"
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -92,12 +93,20 @@ static void disassemble_function(ObjFunction* fn, int indent) {
             case OP_CONST:
             case OP_DEFINE_GLOBAL:
             case OP_GET_GLOBAL:
-            case OP_SET_GLOBAL: {
+            case OP_SET_GLOBAL:
+            case OP_USE_MODULE: {
                 uint16_t idx = fn->code[offset] | (fn->code[offset + 1] << 8);
                 offset += 2;
                 printf(" %d  (", idx);
                 if (idx < (uint16_t)fn->const_count) value_print(fn->constants[idx]);
                 printf(")");
+                break;
+            }
+            case OP_USE_SYMBOL: {
+                uint16_t mod_idx = fn->code[offset] | (fn->code[offset + 1] << 8);
+                uint16_t sym_idx = fn->code[offset + 2] | (fn->code[offset + 3] << 8);
+                offset += 4;
+                printf(" %d, %d", mod_idx, sym_idx);
                 break;
             }
             case OP_GET_LOCAL:
@@ -216,12 +225,77 @@ static int build_file(const char* path) {
     if (tc != 0) { printf("Type errors. Build aborted.\n"); ast_free(prog); free(src); return 1; }
     ObjFunction* fn = compile(prog);
     if (!fn) { fprintf(stderr, "Compilation failed.\n"); ast_free(prog); free(src); return 1; }
-    FILE* out = fopen("a.out", "wb");
-    if (!out) { fprintf(stderr, "Could not create output\n"); ast_free(prog); free(src); return 1; }
-    fprintf(out, "VEXIUM\nversion: %s\n---\n", VEXIUM_VERSION);
+
+    /* Derive output file name: replace .vxm with .vxc */
+    char outpath[512];
+    const char* dot = strrchr(path, '.');
+    if (dot) {
+        int base_len = (int)(dot - path);
+        snprintf(outpath, sizeof(outpath), "%.*s.vxc", base_len, path);
+    } else {
+        snprintf(outpath, sizeof(outpath), "%s.vxc", path);
+    }
+
+    FILE* out = fopen(outpath, "wb");
+    if (!out) { fprintf(stderr, "Could not create output file '%s'\n", outpath); ast_free(prog); free(src); return 1; }
+
+    /* ── Header ── */
+    const char magic[4] = {'V', 'X', 'C', '\0'};
+    fwrite(magic, 1, 4, out);
+    uint32_t version = 210;  /* v2.1.0 */
+    fwrite(&version, sizeof(uint32_t), 1, out);
+
+    /* ── Constant pool ── */
+    uint32_t const_count = (uint32_t)fn->const_count;
+    fwrite(&const_count, sizeof(uint32_t), 1, out);
+    for (int i = 0; i < fn->const_count; i++) {
+        Value v = fn->constants[i];
+        if (is_number(v)) {
+            uint8_t tag = 1;  /* number */
+            fwrite(&tag, 1, 1, out);
+            double d = as_number(v);
+            fwrite(&d, sizeof(double), 1, out);
+        } else if (is_int(v)) {
+            uint8_t tag = 2;  /* int */
+            fwrite(&tag, 1, 1, out);
+            int32_t ival = as_int(v);
+            fwrite(&ival, sizeof(int32_t), 1, out);
+        } else if (is_bool(v)) {
+            uint8_t tag = 3;  /* bool */
+            fwrite(&tag, 1, 1, out);
+            uint8_t bval = as_bool(v) ? 1 : 0;
+            fwrite(&bval, 1, 1, out);
+        } else if (is_nothing(v)) {
+            uint8_t tag = 4;  /* nothing */
+            fwrite(&tag, 1, 1, out);
+        } else if (is_obj(v)) {
+            Obj* obj = (Obj*)as_obj(v);
+            if (obj->type == OBJ_STRING) {
+                uint8_t tag = 5;  /* string */
+                fwrite(&tag, 1, 1, out);
+                ObjString* s = (ObjString*)obj;
+                uint32_t slen = (uint32_t)s->length;
+                fwrite(&slen, sizeof(uint32_t), 1, out);
+                fwrite(s->chars, 1, slen, out);
+            } else {
+                /* Other obj types: write as nothing placeholder */
+                uint8_t tag = 4;
+                fwrite(&tag, 1, 1, out);
+            }
+        } else {
+            uint8_t tag = 0;  /* unknown */
+            fwrite(&tag, 1, 1, out);
+        }
+    }
+
+    /* ── Code ── */
+    uint32_t code_count = (uint32_t)fn->chunk_count;
+    fwrite(&code_count, sizeof(uint32_t), 1, out);
     fwrite(fn->code, 1, fn->chunk_count, out);
+
     fclose(out);
-    printf("Build successful! Output: a.out\n");
+    printf("Build successful! Output: %s (%u bytes code, %u constants)\n",
+           outpath, code_count, const_count);
     ast_free(prog); free(src); return 0;
 }
 
@@ -230,13 +304,37 @@ static int build_file(const char* path) {
  * ══════════════════════════════════════════════════════════════════════ */
 
 static int add_package(const char* pkg) {
-    printf("Adding package: %s\n", pkg);
-    FILE* f = fopen("vex.lock", "a");
-    if (!f) { fprintf(stderr, "Could not create vex.lock\n"); return 1; }
-    fprintf(f, "%s: latest\n", pkg);
-    fclose(f);
-    printf("Package '%s' added to vex.lock\n", pkg);
-    return 0;
+    if (package_add(pkg, "latest")) return 0;
+    return 1;
+}
+
+static int init_package(const char* name) {
+    if (package_init(name, ".")) return 0;
+    return 1;
+}
+
+static int install_packages(void) {
+    return package_install() ? 0 : 1;
+}
+
+static int update_packages(void) {
+    return package_update() ? 0 : 1;
+}
+
+static int run_package_tests(void) {
+    return package_test() ? 0 : 1;
+}
+
+static int fmt_sources(const char* path) {
+    return package_fmt(path) ? 0 : 1;
+}
+
+static int lint_file(const char* path) {
+    return check_file(path);
+}
+
+static int profile_file(const char* path) {
+    return bench_file(path);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -333,6 +431,13 @@ static void print_usage(void) {
     printf("  vexium build <file.vxm>   Compile to native executable (V2.1)\n");
     printf("  vexium check <file.vxm>   Type-check without running (V2.1)\n");
     printf("  vexium add <package>      Add a package dependency (V2.1)\n");
+    printf("  vexium init [name]        Initialize vex.toml package project\n");
+    printf("  vexium install            Install dependencies from vex.toml\n");
+    printf("  vexium update             Update dependencies\n");
+    printf("  vexium test               Run package tests\n");
+    printf("  vexium fmt [path]         Format source files\n");
+    printf("  vexium lint <file.vxm>    Lint via static/type checks\n");
+    printf("  vexium profile <file.vxm> Profile execution (bench mode)\n");
     printf("  vexium bench <file.vxm>    Benchmark: interpreter vs VM\n");
     printf("  vexium disasm <file.vxm>   Disassemble bytecode\n");
     printf("  vexium ast <file.vxm>      Show AST tree (debug)\n");
@@ -356,6 +461,13 @@ int main(int argc, char* argv[]) {
     if (strcmp(argv[1], "check") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium check' requires a file path.\n"); return 1; } return check_file(argv[2]); }
     if (strcmp(argv[1], "build") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium build' requires a file path.\n"); return 1; } return build_file(argv[2]); }
     if (strcmp(argv[1], "add") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium add' requires a package name.\n"); return 1; } return add_package(argv[2]); }
+    if (strcmp(argv[1], "init") == 0) { return init_package(argc >= 3 ? argv[2] : "vex-project"); }
+    if (strcmp(argv[1], "install") == 0) { return install_packages(); }
+    if (strcmp(argv[1], "update") == 0) { return update_packages(); }
+    if (strcmp(argv[1], "test") == 0) { return run_package_tests(); }
+    if (strcmp(argv[1], "fmt") == 0) { return fmt_sources(argc >= 3 ? argv[2] : "."); }
+    if (strcmp(argv[1], "lint") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium lint' requires a file path.\n"); return 1; } return lint_file(argv[2]); }
+    if (strcmp(argv[1], "profile") == 0) { if (argc < 3) { fprintf(stderr, "Error: 'vexium profile' requires a file path.\n"); return 1; } return profile_file(argv[2]); }
     if (argc == 2) return run_file(argv[1]);
     fprintf(stderr, "Unknown command: %s\n", argv[1]);
     print_usage();

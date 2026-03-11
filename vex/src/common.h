@@ -8,11 +8,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 
-#ifndef bool
-typedef int bool;
-#define true 1
-#define false 0
-#endif
+#include <stdbool.h>
 
 #define VEXIUM_VERSION "2.1.0"
 #define VEXIUM_MAX_INDENT_DEPTH 64

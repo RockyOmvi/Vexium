@@ -1,0 +1,26 @@
+from json use parse
+from json use stringify
+
+display "=== JSON RUNTIME PROBE ==="
+
+let good be parse("[1,2,3]")
+display good[1]
+display stringify(good)
+
+let bad_array be parse("[1,2,]")
+if bad_array is nothing:
+    display "bad-array-rejected"
+else:
+    display "bad-array-accepted"
+
+let trailing_garbage be parse("truex")
+if trailing_garbage is nothing:
+    display "trailing-garbage-rejected"
+else:
+    display "trailing-garbage-accepted"
+
+let bad_number be parse("1e")
+if bad_number is nothing:
+    display "bad-number-rejected"
+else:
+    display "bad-number-accepted"

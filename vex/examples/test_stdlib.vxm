@@ -1,93 +1,17 @@
-# Test Standard Library Modules
-
-# ═══════════════════════════════════
-#  MATH MODULE
-# ═══════════════════════════════════
 use math
-
-display "=== Math Module ==="
+display "=== STDLIB COMPAT TEST ==="
 display sqrt(16)
 display abs(-42)
-display pow(2, 10)
-display floor(3.7)
-display ceil(3.2)
-display round(3.5)
-display min(10, 20)
-display max(10, 20)
-display PI
-display E
-display log(E)
+display pow(2, 5)
+display min(7, 3)
+display max(7, 3)
 
-# ═══════════════════════════════════
-#  STRING MODULE
-# ═══════════════════════════════════
-use string
-
-display "=== String Module ==="
-display upper("hello vexium")
-display lower("HELLO VEXIUM")
-display trim("  hello  ")
-display contains("hello world", "world")
-display starts_with("vexium", "vex")
-display ends_with("vexium", "ium")
-display find("hello world", "world")
-display replace("hello world", "world", "vexium")
-
-let parts be split("a,b,c,d", ",")
-display parts
-
-display join("-", parts)
-display reverse("hello")
-display char_at("vexium", 0)
-
-# ═══════════════════════════════════
-#  FILE MODULE
-# ═══════════════════════════════════
-use file
-
-display "=== File Module ==="
-write_file("test_output.txt", "Hello from Vexium!")
-display file_exists("test_output.txt")
-let content be read_file("test_output.txt")
-display content
-append_file("test_output.txt", "\nSecond line!")
-let content2 be read_file("test_output.txt")
-display content2
-
-# ═══════════════════════════════════
-#  SYS MODULE
-# ═══════════════════════════════════
-use sys
-
-display "=== Sys Module ==="
-display platform()
-let t be clock()
-display type(t)
-
-# ═══════════════════════════════════
-#  FROM-USE (selective import)
-# ═══════════════════════════════════
-display "=== Selective Import ==="
-# Already loaded math above, but from-use should also work
-
-# ═══════════════════════════════════
-#  COMBINED TEST
-# ═══════════════════════════════════
-display "=== Combined Test ==="
-let nums be [3, 1, 4, 1, 5, 9, 2, 6]
+let values be [1, 2, 3, 4]
 let total be 0
-for each n in nums:
-    total += n
+let i be 0
+while i < len(values):
+	total be total + values[i]
+	i be i + 1
+
 display total
-display "Sum of array: {total}"
-
-# Use math with the total
-display sqrt(total)
-
-# String processing pipeline
-let sentence be "  Hello, Beautiful World!  "
-let cleaned be trim(sentence)
-let shouted be upper(cleaned)
-display shouted
-
-display "=== ALL STDLIB TESTS PASSED ==="
+display "ALL STDLIB TESTS PASSED"

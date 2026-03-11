@@ -374,7 +374,6 @@ void ast_print(ASTNode* node, int indent);
 /* Memory management */
 void ast_free(ASTNode* node);
 
-/* Utility — duplicate a string */
-char* vex_strdup(const char* src, int length);
+/* vex_strdup is defined in common.h as static inline */
 
 #endif /* VEXIUM_AST_H */

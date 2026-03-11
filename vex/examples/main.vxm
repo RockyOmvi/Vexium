@@ -1,0 +1,5 @@
+use tensor.c
+
+let layer be tensor(3)
+
+display layer

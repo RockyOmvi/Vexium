@@ -1,0 +1,6 @@
+let evens be 0
+for m in 0 to 10:
+    if m % 2 != 0:
+        skip
+    evens = evens + 1
+display evens

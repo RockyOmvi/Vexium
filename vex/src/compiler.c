@@ -97,7 +97,11 @@ static void end_scope(int line) {
     current->scope_depth--;
     while (current->local_count > 0 &&
            current->locals[current->local_count - 1].depth > current->scope_depth) {
-        emit_byte(OP_POP, line);
+        if (current->locals[current->local_count - 1].is_captured) {
+            emit_byte(OP_CLOSE_UPVALUE, line);
+        } else {
+            emit_byte(OP_POP, line);
+        }
         current->local_count--;
     }
 }
@@ -112,12 +116,49 @@ static void add_local(const char* name) {
     strncpy(local->name, name, 255);
     local->name[255] = '\0';
     local->depth = current->scope_depth;
+    local->is_captured = false;
 }
 
 static int resolve_local(Compiler* compiler, const char* name) {
     for (int i = compiler->local_count - 1; i >= 0; i--) {
         if (strcmp(compiler->locals[i].name, name) == 0) return i;
     }
+    return -1;
+}
+
+static int add_upvalue(Compiler* compiler, uint8_t index, bool is_local) {
+    for (int i = 0; i < compiler->upvalue_count; i++) {
+        if (compiler->upvalues[i].index == index && compiler->upvalues[i].is_local == is_local) {
+            return i;
+        }
+    }
+
+    if (compiler->upvalue_count >= MAX_UPVALUES) {
+        fprintf(stderr, "[Compiler Error] Too many closure variables.\n");
+        compiler->had_error = true;
+        return -1;
+    }
+
+    int slot = compiler->upvalue_count++;
+    compiler->upvalues[slot].index = index;
+    compiler->upvalues[slot].is_local = is_local;
+    return slot;
+}
+
+static int resolve_upvalue(Compiler* compiler, const char* name) {
+    if (compiler->enclosing == NULL) return -1;
+
+    int local = resolve_local(compiler->enclosing, name);
+    if (local != -1) {
+        compiler->enclosing->locals[local].is_captured = true;
+        return add_upvalue(compiler, (uint8_t)local, true);
+    }
+
+    int up = resolve_upvalue(compiler->enclosing, name);
+    if (up != -1) {
+        return add_upvalue(compiler, (uint8_t)up, false);
+    }
+
     return -1;
 }
 
@@ -131,8 +172,38 @@ static void compile_list_comp(ASTNode* node);
 static void compile_match(ASTNode* node);
 static void compile_lambda(ASTNode* node);
 static void compile_defer(ASTNode* node);
+
+/* Helper: check if a node type is an expression */
+static bool is_expression_node(NodeType type) {
+    switch (type) {
+        case NODE_INT_LITERAL:
+        case NODE_FLOAT_LITERAL:
+        case NODE_STRING_LITERAL:
+        case NODE_BOOL_LITERAL:
+        case NODE_NOTHING_LITERAL:
+        case NODE_IDENTIFIER:
+        case NODE_BINARY_OP:
+        case NODE_UNARY_OP:
+        case NODE_CALL:
+        case NODE_INDEX:
+        case NODE_FIELD_ACCESS:
+        case NODE_ARRAY_LITERAL:
+        case NODE_MAP_LITERAL:
+        case NODE_ASSIGN:
+        case NODE_LAMBDA:
+        case NODE_LIST_COMP:
+        case NODE_AWAIT:
+        case NODE_SPAWN:
+        case NODE_CHANNEL_CREATE:
+        case NODE_YIELD:
+            return true;
+        default:
+            return false;
+    }
+}
 static void compile_await(ASTNode* node);
 static void compile_spawn(ASTNode* node);
+static void compile_channel_create(ASTNode* node);
 
 /* ══════════════════════════════════════════════════════════════
  *  COMPILE EXPRESSIONS
@@ -238,9 +309,15 @@ static void compile_identifier(ASTNode* node) {
         emit_byte(OP_GET_LOCAL, node->line);
         emit_byte((uint8_t)slot, node->line);
     } else {
-        int idx = add_string_constant(name, (int)strlen(name));
-        emit_byte(OP_GET_GLOBAL, node->line);
-        emit_short((uint16_t)idx, node->line);
+        int up = resolve_upvalue(current, name);
+        if (up != -1) {
+            emit_byte(OP_GET_UPVALUE, node->line);
+            emit_byte((uint8_t)up, node->line);
+        } else {
+            int idx = add_string_constant(name, (int)strlen(name));
+            emit_byte(OP_GET_GLOBAL, node->line);
+            emit_short((uint16_t)idx, node->line);
+        }
     }
 }
 
@@ -346,9 +423,12 @@ static void compile_index(ASTNode* node) {
 }
 
 static void compile_field_access(ASTNode* node) {
-    /* obj.field — compile object, then pop (VM doesn't support field access yet) */
+    /* obj.field — compile object, then emit OP_GET_FIELD with field name */
     compile_expression(node->as.field_access.object);
-    emit_byte(OP_POP, node->line);  /* Placeholder - field access not in VM yet */
+    int name_idx = add_string_constant(node->as.field_access.field,
+                                        (int)strlen(node->as.field_access.field));
+    emit_byte(OP_GET_FIELD, node->line);
+    emit_short((uint16_t)name_idx, node->line);
 }
 
 static void compile_assign(ASTNode* node) {
@@ -381,14 +461,26 @@ static void compile_assign(ASTNode* node) {
             emit_byte(OP_SET_LOCAL, node->line);
             emit_byte((uint8_t)slot, node->line);
         } else {
-            int idx = add_string_constant(name, (int)strlen(name));
-            emit_byte(OP_SET_GLOBAL, node->line);
-            emit_short((uint16_t)idx, node->line);
+            int up = resolve_upvalue(current, name);
+            if (up != -1) {
+                emit_byte(OP_SET_UPVALUE, node->line);
+                emit_byte((uint8_t)up, node->line);
+            } else {
+                int idx = add_string_constant(name, (int)strlen(name));
+                emit_byte(OP_SET_GLOBAL, node->line);
+                emit_short((uint16_t)idx, node->line);
+            }
         }
     } else if (target->type == NODE_INDEX) {
         compile_expression(target->as.index_access.object);
         compile_expression(target->as.index_access.index);
         emit_byte(OP_INDEX_SET, node->line);
+    } else if (target->type == NODE_FIELD_ACCESS) {
+        compile_expression(target->as.field_access.object);
+        int name_idx = add_string_constant(target->as.field_access.field,
+                                            (int)strlen(target->as.field_access.field));
+        emit_byte(OP_SET_FIELD, node->line);
+        emit_short((uint16_t)name_idx, node->line);
     }
 }
 
@@ -413,6 +505,8 @@ static void compile_expression(ASTNode* node) {
         case NODE_LIST_COMP:      compile_list_comp(node); break;
         case NODE_AWAIT:          compile_await(node); break;
         case NODE_SPAWN:          compile_spawn(node); break;
+        case NODE_CHANNEL_CREATE: compile_channel_create(node); break;
+        case NODE_YIELD:          compile_expression(node->as.yield.expr); break;
         default:
             fprintf(stderr, "[Compiler] Expression node type %d not compiled (line %d)\n",
                     node->type, node->line);
@@ -467,7 +561,21 @@ static void compile_if(ASTNode* node) {
 }
 
 static void compile_while(ASTNode* node) {
+    /* Save outer loop context */
+    int outer_loop_start = current->loop_start;
+    int outer_loop_scope = current->loop_scope_depth;
+    int outer_exit_count = current->loop_exit_count;
+    int outer_exits[MAX_BREAK_JUMPS];
+    memcpy(outer_exits, current->loop_exit_jumps, outer_exit_count * sizeof(int));
+    int outer_continue_count = current->loop_continue_count;
+    int outer_continues[MAX_BREAK_JUMPS];
+    memcpy(outer_continues, current->loop_continue_jumps, outer_continue_count * sizeof(int));
+
     int loop_start = current->function->chunk_count;
+    current->loop_start = loop_start;
+    current->loop_scope_depth = current->scope_depth;
+    current->loop_exit_count = 0;
+    current->loop_continue_count = 0;
 
     compile_expression(node->as.while_stmt.condition);
     int exit_jump = emit_jump(OP_JMP_IF_FALSE, node->line);
@@ -477,15 +585,46 @@ static void compile_while(ASTNode* node) {
     compile_node(node->as.while_stmt.body);
     end_scope(node->line);
 
+    /* Patch all skip (continue) jumps here — for while, continue = loop start */
+    for (int i = 0; i < current->loop_continue_count; i++) {
+        patch_jump(current->loop_continue_jumps[i]);
+    }
+
     emit_loop(loop_start, node->line);
     patch_jump(exit_jump);
     emit_byte(OP_POP, node->line);
+
+    /* Patch all break jumps to here */
+    for (int i = 0; i < current->loop_exit_count; i++) {
+        patch_jump(current->loop_exit_jumps[i]);
+    }
+
+    /* Restore outer loop context */
+    current->loop_start = outer_loop_start;
+    current->loop_scope_depth = outer_loop_scope;
+    current->loop_exit_count = outer_exit_count;
+    memcpy(current->loop_exit_jumps, outer_exits, outer_exit_count * sizeof(int));
+    current->loop_continue_count = outer_continue_count;
+    memcpy(current->loop_continue_jumps, outer_continues, outer_continue_count * sizeof(int));
 }
 
 static void compile_for_range(ASTNode* node) {
     const char* var_name = node->as.for_range.var_name;
 
+    /* Save outer loop context */
+    int outer_loop_start = current->loop_start;
+    int outer_loop_scope = current->loop_scope_depth;
+    int outer_exit_count = current->loop_exit_count;
+    int outer_exits[MAX_BREAK_JUMPS];
+    memcpy(outer_exits, current->loop_exit_jumps, outer_exit_count * sizeof(int));
+    int outer_continue_count = current->loop_continue_count;
+    int outer_continues[MAX_BREAK_JUMPS];
+    memcpy(outer_continues, current->loop_continue_jumps, outer_continue_count * sizeof(int));
+
     begin_scope();
+    current->loop_scope_depth = current->scope_depth;
+    current->loop_exit_count = 0;
+    current->loop_continue_count = 0;
 
     /* Init loop var */
     compile_expression(node->as.for_range.start);
@@ -507,19 +646,49 @@ static void compile_for_range(ASTNode* node) {
     int step_slot = current->local_count - 1;
 
     int loop_start = current->function->chunk_count;
+    current->loop_start = loop_start;
 
-    /* Condition: var < end */
+    /* Condition: handles both counting up and down.
+     * We check: (step > 0 && var < end) || (step < 0 && var > end)
+     * Simplified: (var - end) * step < 0  ... but for zero step we skip.
+     * Pragmatic approach: check step sign at runtime with jumps.
+     *   step >= 0 ? (var < end) : (var > end) */
+    emit_byte(OP_GET_LOCAL, node->line);
+    emit_byte((uint8_t)step_slot, node->line);
+    emit_constant(val_int(0), node->line);
+    emit_byte(OP_GTE, node->line);  /* step >= 0 ? */
+    int step_positive_jump = emit_jump(OP_JMP_IF_FALSE, node->line);
+    emit_byte(OP_POP, node->line);
+
+    /* step >= 0: use var < end */
     emit_byte(OP_GET_LOCAL, node->line);
     emit_byte((uint8_t)var_slot, node->line);
     emit_byte(OP_GET_LOCAL, node->line);
     emit_byte((uint8_t)end_slot, node->line);
-    emit_byte(OP_LT, node->line);
+        emit_byte(OP_LTE, node->line);
+    int after_cond = emit_jump(OP_JMP, node->line);
+
+    /* step < 0: use var > end */
+    patch_jump(step_positive_jump);
+    emit_byte(OP_POP, node->line);
+    emit_byte(OP_GET_LOCAL, node->line);
+    emit_byte((uint8_t)var_slot, node->line);
+    emit_byte(OP_GET_LOCAL, node->line);
+    emit_byte((uint8_t)end_slot, node->line);
+        emit_byte(OP_GTE, node->line);
+
+    patch_jump(after_cond);
 
     int exit_jump = emit_jump(OP_JMP_IF_FALSE, node->line);
     emit_byte(OP_POP, node->line);
 
     /* Body */
     compile_node(node->as.for_range.body);
+
+    /* Patch all skip (continue) jumps to the increment point */
+    for (int i = 0; i < current->loop_continue_count; i++) {
+        patch_jump(current->loop_continue_jumps[i]);
+    }
 
     /* Increment: var = var + step */
     emit_byte(OP_GET_LOCAL, node->line);
@@ -535,13 +704,39 @@ static void compile_for_range(ASTNode* node) {
     patch_jump(exit_jump);
     emit_byte(OP_POP, node->line);
 
+    /* Patch all break jumps to here */
+    for (int i = 0; i < current->loop_exit_count; i++) {
+        patch_jump(current->loop_exit_jumps[i]);
+    }
+
     end_scope(node->line);
+
+    /* Restore outer loop context */
+    current->loop_start = outer_loop_start;
+    current->loop_scope_depth = outer_loop_scope;
+    current->loop_exit_count = outer_exit_count;
+    memcpy(current->loop_exit_jumps, outer_exits, outer_exit_count * sizeof(int));
+    current->loop_continue_count = outer_continue_count;
+    memcpy(current->loop_continue_jumps, outer_continues, outer_continue_count * sizeof(int));
 }
 
 static void compile_for_each(ASTNode* node) {
     const char* var_name = node->as.for_each.var_name;
 
+    /* Save outer loop context */
+    int outer_loop_start = current->loop_start;
+    int outer_loop_scope = current->loop_scope_depth;
+    int outer_exit_count = current->loop_exit_count;
+    int outer_exits[MAX_BREAK_JUMPS];
+    memcpy(outer_exits, current->loop_exit_jumps, outer_exit_count * sizeof(int));
+    int outer_continue_count = current->loop_continue_count;
+    int outer_continues[MAX_BREAK_JUMPS];
+    memcpy(outer_continues, current->loop_continue_jumps, outer_continue_count * sizeof(int));
+
     begin_scope();
+    current->loop_scope_depth = current->scope_depth;
+    current->loop_exit_count = 0;
+    current->loop_continue_count = 0;
 
     /* Collection on stack */
     compile_expression(node->as.for_each.iterable);
@@ -559,6 +754,7 @@ static void compile_for_each(ASTNode* node) {
     int var_slot = current->local_count - 1;
 
     int loop_start = current->function->chunk_count;
+    current->loop_start = loop_start;
 
     /* Condition: idx < len(iter) */
     emit_byte(OP_GET_LOCAL, node->line);
@@ -589,6 +785,11 @@ static void compile_for_each(ASTNode* node) {
     /* Body */
     compile_node(node->as.for_each.body);
 
+    /* Patch all skip (continue) jumps to the increment point */
+    for (int i = 0; i < current->loop_continue_count; i++) {
+        patch_jump(current->loop_continue_jumps[i]);
+    }
+
     /* Increment idx */
     emit_byte(OP_GET_LOCAL, node->line);
     emit_byte((uint8_t)idx_slot, node->line);
@@ -602,11 +803,37 @@ static void compile_for_each(ASTNode* node) {
     patch_jump(exit_jump);
     emit_byte(OP_POP, node->line);
 
+    /* Patch all break jumps to here */
+    for (int i = 0; i < current->loop_exit_count; i++) {
+        patch_jump(current->loop_exit_jumps[i]);
+    }
+
     end_scope(node->line);
+
+    /* Restore outer loop context */
+    current->loop_start = outer_loop_start;
+    current->loop_scope_depth = outer_loop_scope;
+    current->loop_exit_count = outer_exit_count;
+    memcpy(current->loop_exit_jumps, outer_exits, outer_exit_count * sizeof(int));
+    current->loop_continue_count = outer_continue_count;
+    memcpy(current->loop_continue_jumps, outer_continues, outer_continue_count * sizeof(int));
 }
 
 static void compile_repeat(ASTNode* node) {
+    /* Save outer loop context */
+    int outer_loop_start = current->loop_start;
+    int outer_loop_scope = current->loop_scope_depth;
+    int outer_exit_count = current->loop_exit_count;
+    int outer_exits[MAX_BREAK_JUMPS];
+    memcpy(outer_exits, current->loop_exit_jumps, outer_exit_count * sizeof(int));
+    int outer_continue_count = current->loop_continue_count;
+    int outer_continues[MAX_BREAK_JUMPS];
+    memcpy(outer_continues, current->loop_continue_jumps, outer_continue_count * sizeof(int));
+
     begin_scope();
+    current->loop_scope_depth = current->scope_depth;
+    current->loop_exit_count = 0;
+    current->loop_continue_count = 0;
 
     emit_constant(val_int(0), node->line);
     add_local("__rep_i__");
@@ -617,6 +844,7 @@ static void compile_repeat(ASTNode* node) {
     int limit_slot = current->local_count - 1;
 
     int loop_start = current->function->chunk_count;
+    current->loop_start = loop_start;
 
     emit_byte(OP_GET_LOCAL, node->line);
     emit_byte((uint8_t)counter_slot, node->line);
@@ -628,6 +856,11 @@ static void compile_repeat(ASTNode* node) {
     emit_byte(OP_POP, node->line);
 
     compile_node(node->as.repeat.body);
+
+    /* Patch all skip (continue) jumps to the increment point */
+    for (int i = 0; i < current->loop_continue_count; i++) {
+        patch_jump(current->loop_continue_jumps[i]);
+    }
 
     /* counter++ */
     emit_byte(OP_GET_LOCAL, node->line);
@@ -642,7 +875,20 @@ static void compile_repeat(ASTNode* node) {
     patch_jump(exit_jump);
     emit_byte(OP_POP, node->line);
 
+    /* Patch all break jumps to here */
+    for (int i = 0; i < current->loop_exit_count; i++) {
+        patch_jump(current->loop_exit_jumps[i]);
+    }
+
     end_scope(node->line);
+
+    /* Restore outer loop context */
+    current->loop_start = outer_loop_start;
+    current->loop_scope_depth = outer_loop_scope;
+    current->loop_exit_count = outer_exit_count;
+    memcpy(current->loop_exit_jumps, outer_exits, outer_exit_count * sizeof(int));
+    current->loop_continue_count = outer_continue_count;
+    memcpy(current->loop_continue_jumps, outer_continues, outer_continue_count * sizeof(int));
 }
 
 static void compile_list_comp(ASTNode* node) {
@@ -790,7 +1036,12 @@ static void compile_fn_decl(ASTNode* node) {
     fn_compiler.enclosing = current;
     fn_compiler.local_count = 0;
     fn_compiler.scope_depth = 0;
+    fn_compiler.upvalue_count = 0;
     fn_compiler.had_error = false;
+    fn_compiler.loop_start = -1;
+    fn_compiler.loop_scope_depth = 0;
+    fn_compiler.loop_exit_count = 0;
+    fn_compiler.loop_continue_count = 0;
     current = &fn_compiler;
 
     begin_scope();
@@ -814,9 +1065,15 @@ static void compile_fn_decl(ASTNode* node) {
     current = fn_compiler.enclosing;
     if (had_err) current->had_error = true;
 
+    fn->upvalue_count = fn_compiler.upvalue_count;
+
     int fn_idx = make_constant(val_obj(fn));
-    emit_byte(OP_CONST, node->line);
+    emit_byte(OP_CLOSURE, node->line);
     emit_short((uint16_t)fn_idx, node->line);
+    for (int i = 0; i < fn_compiler.upvalue_count; i++) {
+        emit_byte(fn_compiler.upvalues[i].is_local ? 1 : 0, node->line);
+        emit_byte(fn_compiler.upvalues[i].index, node->line);
+    }
 
     if (current->scope_depth > 0) {
         add_local(name);
@@ -836,7 +1093,12 @@ static void compile_lambda(ASTNode* node) {
     fn_compiler.enclosing = current;
     fn_compiler.local_count = 0;
     fn_compiler.scope_depth = 0;
+    fn_compiler.upvalue_count = 0;
     fn_compiler.had_error = false;
+    fn_compiler.loop_start = -1;
+    fn_compiler.loop_scope_depth = 0;
+    fn_compiler.loop_exit_count = 0;
+    fn_compiler.loop_continue_count = 0;
     current = &fn_compiler;
 
     begin_scope();
@@ -853,7 +1115,7 @@ static void compile_lambda(ASTNode* node) {
     if (body->type == NODE_EXPR_STMT) {
         compile_expression(body->as.expr_stmt.expr);
         emit_byte(OP_RETURN, node->line);
-    } else if (body->type <= NODE_LIST_COMP) {
+    } else if (is_expression_node(body->type)) {
         compile_expression(body);
         emit_byte(OP_RETURN, node->line);
     } else {
@@ -866,9 +1128,15 @@ static void compile_lambda(ASTNode* node) {
     current = fn_compiler.enclosing;
     if (had_err) current->had_error = true;
 
+    fn->upvalue_count = fn_compiler.upvalue_count;
+
     int fn_idx = make_constant(val_obj(fn));
-    emit_byte(OP_CONST, node->line);
+    emit_byte(OP_CLOSURE, node->line);
     emit_short((uint16_t)fn_idx, node->line);
+    for (int i = 0; i < fn_compiler.upvalue_count; i++) {
+        emit_byte(fn_compiler.upvalues[i].is_local ? 1 : 0, node->line);
+        emit_byte(fn_compiler.upvalues[i].index, node->line);
+    }
 }
 
 static void compile_give_back(ASTNode* node) {
@@ -901,19 +1169,263 @@ static void compile_await(ASTNode* node) {
 
 /* ── Spawn: create a new concurrent task ── */
 static void compile_spawn(ASTNode* node) {
-    /* spawn expr — creates a new task to run the expression */
-    
-    /* Compile the function expression */
-    compile_expression(node->as.spawn.function);
-    
-    /* Compile arguments if any */
-    if (node->as.spawn.args.count > 0) {
-        emit_byte(OP_SPAWN, node->line);
-        emit_byte(node->as.spawn.args.count, node->line);
+    /* spawn expr — create a task from callable + args without eager call */
+    uint8_t argc = 0;
+
+    if (node->as.spawn.function && node->as.spawn.function->type == NODE_CALL) {
+        ASTNode* call = node->as.spawn.function;
+        compile_expression(call->as.call.callee);
+        for (int i = 0; i < call->as.call.args.count; i++) {
+            compile_expression(call->as.call.args.items[i]);
+            argc++;
+        }
     } else {
-        emit_byte(OP_SPAWN, node->line);
-        emit_byte(0, node->line);  /* argc = 0 */
+        compile_expression(node->as.spawn.function);
     }
+
+    for (int i = 0; i < node->as.spawn.args.count; i++) {
+        compile_expression(node->as.spawn.args.items[i]);
+        argc++;
+    }
+
+    emit_byte(OP_SPAWN, node->line);
+    emit_byte(argc, node->line);
+}
+
+/* ── Channel creation: channel() ── */
+static void compile_channel_create(ASTNode* node) {
+    emit_byte(OP_CHANNEL_CREATE, node->line);
+}
+
+/* ══════════════════════════════════════════════════════════════
+ *  BREAK & SKIP (continue)
+ * ══════════════════════════════════════════════════════════════ */
+
+static void compile_break(ASTNode* node) {
+    if (current->loop_start == -1) {
+        fprintf(stderr, "[Compiler Error] 'break' outside of a loop at line %d\n", node->line);
+        current->had_error = true;
+        return;
+    }
+    /* Pop locals that are deeper than the loop scope */
+    int pops = 0;
+    for (int i = current->local_count - 1; i >= 0; i--) {
+        if (current->locals[i].depth <= current->loop_scope_depth) break;
+        pops++;
+    }
+    for (int i = 0; i < pops; i++) {
+        emit_byte(OP_POP, node->line);
+    }
+    /* Emit forward jump — will be patched at end of loop */
+    if (current->loop_exit_count < MAX_BREAK_JUMPS) {
+        current->loop_exit_jumps[current->loop_exit_count++] = emit_jump(OP_JMP, node->line);
+    } else {
+        fprintf(stderr, "[Compiler Error] Too many break statements in loop at line %d\n", node->line);
+        current->had_error = true;
+    }
+}
+
+static void compile_skip(ASTNode* node) {
+    if (current->loop_start == -1) {
+        fprintf(stderr, "[Compiler Error] 'skip' outside of a loop at line %d\n", node->line);
+        current->had_error = true;
+        return;
+    }
+    /* Pop locals that are deeper than the loop scope */
+    int pops = 0;
+    for (int i = current->local_count - 1; i >= 0; i--) {
+        if (current->locals[i].depth <= current->loop_scope_depth) break;
+        pops++;
+    }
+    for (int i = 0; i < pops; i++) {
+        emit_byte(OP_POP, node->line);
+    }
+    /* Emit a forward jump to be patched at the loop increment point.
+     * This avoids skipping the increment in for-range/for-each/repeat loops. */
+    if (current->loop_continue_count < MAX_BREAK_JUMPS) {
+        current->loop_continue_jumps[current->loop_continue_count++] = emit_jump(OP_JMP, node->line);
+    } else {
+        fprintf(stderr, "[Compiler Error] Too many skip statements in loop at line %d\n", node->line);
+        current->had_error = true;
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════
+ *  STRUCT DECLARATIONS
+ * ══════════════════════════════════════════════════════════════ */
+
+static void compile_struct_decl(ASTNode* node) {
+    const char* name = node->as.struct_decl.name;
+    int field_count = node->as.struct_decl.field_count;
+    int method_count = node->as.struct_decl.method_count;
+
+    /* Create a constructor function for this struct.
+     * The constructor takes field values and returns an ObjInstance. */
+    ObjFunction* ctor = obj_function_new(name);
+    ctor->arity = field_count;
+
+    Compiler fn_compiler;
+    fn_compiler.function = ctor;
+    fn_compiler.enclosing = current;
+    fn_compiler.local_count = 0;
+    fn_compiler.scope_depth = 0;
+    fn_compiler.upvalue_count = 0;
+    fn_compiler.had_error = false;
+    fn_compiler.loop_start = -1;
+    fn_compiler.loop_exit_count = 0;
+    fn_compiler.loop_continue_count = 0;
+    current = &fn_compiler;
+
+    begin_scope();
+    add_local("");  /* slot 0 for callee */
+
+    /* Add parameters for each field */
+    for (int i = 0; i < field_count; i++) {
+        add_local(node->as.struct_decl.fields[i].name);
+    }
+
+    /* Emit OP_STRUCT to create a new instance with N fields */
+    emit_byte(OP_STRUCT, node->line);
+    emit_short((uint16_t)field_count, node->line);
+    add_local("__inst__");
+    int inst_slot = current->local_count - 1;
+
+    /* Set each field on the instance */
+    for (int i = 0; i < field_count; i++) {
+        emit_byte(OP_GET_LOCAL, node->line);
+        emit_byte((uint8_t)(i + 1), node->line);  /* param slot */
+        emit_byte(OP_GET_LOCAL, node->line);
+        emit_byte((uint8_t)inst_slot, node->line);
+        int fname_idx = add_string_constant(node->as.struct_decl.fields[i].name,
+                                             (int)strlen(node->as.struct_decl.fields[i].name));
+        emit_byte(OP_SET_FIELD, node->line);
+        emit_short((uint16_t)fname_idx, node->line);
+        emit_byte(OP_POP, node->line);  /* pop set result */
+    }
+
+    /* Return the instance */
+    emit_byte(OP_GET_LOCAL, node->line);
+    emit_byte((uint8_t)inst_slot, node->line);
+    emit_byte(OP_RETURN, node->line);
+
+    bool had_err = fn_compiler.had_error;
+    current = fn_compiler.enclosing;
+    if (had_err) current->had_error = true;
+
+    /* Compile methods separately */
+    for (int i = 0; i < method_count; i++) {
+        /* Methods are compiled as standalone functions named struct.method */
+        StructMethod* m = &node->as.struct_decl.methods[i];
+        if (m->body) {
+            char method_name[512];
+            snprintf(method_name, sizeof(method_name), "%s.%s", name, m->name);
+
+            ObjFunction* mfn = obj_function_new(method_name);
+            mfn->arity = m->params.count;
+
+            Compiler m_compiler;
+            m_compiler.function = mfn;
+            m_compiler.enclosing = current;
+            m_compiler.local_count = 0;
+            m_compiler.scope_depth = 0;
+            m_compiler.upvalue_count = 0;
+            m_compiler.had_error = false;
+            m_compiler.loop_start = -1;
+            m_compiler.loop_exit_count = 0;
+            m_compiler.loop_continue_count = 0;
+            current = &m_compiler;
+
+            begin_scope();
+            add_local("");  /* slot 0 */
+            for (int j = 0; j < m->params.count; j++) {
+                add_local(m->params.items[j].name);
+            }
+            compile_node(m->body);
+            emit_byte(OP_NOTHING, node->line);
+            emit_byte(OP_RETURN, node->line);
+
+            bool m_err = m_compiler.had_error;
+            current = m_compiler.enclosing;
+            if (m_err) current->had_error = true;
+
+            mfn->upvalue_count = m_compiler.upvalue_count;
+
+            int mfn_idx = make_constant(val_obj(mfn));
+            emit_byte(OP_CLOSURE, node->line);
+            emit_short((uint16_t)mfn_idx, node->line);
+            for (int j = 0; j < m_compiler.upvalue_count; j++) {
+                emit_byte(m_compiler.upvalues[j].is_local ? 1 : 0, node->line);
+                emit_byte(m_compiler.upvalues[j].index, node->line);
+            }
+
+            int mname_idx = add_string_constant(method_name, (int)strlen(method_name));
+            emit_byte(OP_DEFINE_GLOBAL, node->line);
+            emit_short((uint16_t)mname_idx, node->line);
+        }
+    }
+
+    /* Register constructor as a global */
+    int fn_idx = make_constant(val_obj(ctor));
+    emit_byte(OP_CONST, node->line);
+    emit_short((uint16_t)fn_idx, node->line);
+
+    int name_idx = add_string_constant(name, (int)strlen(name));
+    emit_byte(OP_DEFINE_GLOBAL, node->line);
+    emit_short((uint16_t)name_idx, node->line);
+}
+
+/* ══════════════════════════════════════════════════════════════
+ *  ATTEMPT/OTHERWISE (try/catch)
+ * ══════════════════════════════════════════════════════════════ */
+
+static void compile_attempt(ASTNode* node) {
+    /* attempt/otherwise compiles to:
+     *   try_block code
+     *   JMP end
+     *   catch_block code (error name as local)
+     *   end:
+     * Without VM exception support, we compile both blocks
+     * but the otherwise block is skipped on success. */
+    compile_node(node->as.attempt.try_block);
+    int end_jump = emit_jump(OP_JMP, node->line);
+
+    /* Otherwise block — in normal execution this is skipped.
+     * When VM exception support is added, errors would jump here. */
+    if (node->as.attempt.catch_block) {
+        begin_scope();
+        /* Push error message placeholder */
+        emit_byte(OP_NOTHING, node->line);
+        if (node->as.attempt.error_name) {
+            add_local(node->as.attempt.error_name);
+        } else {
+            add_local("__err__");
+        }
+        compile_node(node->as.attempt.catch_block);
+        end_scope(node->line);
+    }
+
+    patch_jump(end_jump);
+}
+
+/* ══════════════════════════════════════════════════════════════
+ *  USE / FROM-USE (Module Import)
+ * ══════════════════════════════════════════════════════════════ */
+
+static void compile_use(ASTNode* node) {
+    int mod_idx = add_string_constant(node->as.use_stmt.module_name,
+                                      (int)strlen(node->as.use_stmt.module_name));
+    emit_byte(OP_USE_MODULE, node->line);
+    emit_short((uint16_t)mod_idx, node->line);
+}
+
+static void compile_from_use(ASTNode* node) {
+    int mod_idx = add_string_constant(node->as.from_use.module_name,
+                                      (int)strlen(node->as.from_use.module_name));
+    int sym_idx = add_string_constant(node->as.from_use.import_name,
+                                      (int)strlen(node->as.from_use.import_name));
+    emit_byte(OP_USE_SYMBOL, node->line);
+    emit_short((uint16_t)mod_idx, node->line);
+    emit_short((uint16_t)sym_idx, node->line);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -937,9 +1449,12 @@ static void compile_node(ASTNode* node) {
         case NODE_ARRAY_LITERAL:
         case NODE_MAP_LITERAL:
         case NODE_INDEX:
+        case NODE_FIELD_ACCESS:
         case NODE_LAMBDA:
         case NODE_LIST_COMP:
         case NODE_AWAIT:
+        case NODE_CHANNEL_CREATE:
+        case NODE_YIELD:
             compile_expression(node);
             break;
 
@@ -953,26 +1468,37 @@ static void compile_node(ASTNode* node) {
             compile_var_decl(node);
             break;
 
-        case NODE_DISPLAY:      compile_display(node);    break;
-        case NODE_IF:           compile_if(node);         break;
-        case NODE_MATCH:        compile_match(node);      break;
-        case NODE_WHILE:        compile_while(node);      break;
-        case NODE_FOR_RANGE:    compile_for_range(node);  break;
-        case NODE_FOR_EACH:     compile_for_each(node);   break;
-        case NODE_REPEAT:       compile_repeat(node);     break;
-        case NODE_FN_DECL:      compile_fn_decl(node);    break;
-        case NODE_STRUCT_DECL:
+        case NODE_DISPLAY:      compile_display(node);      break;
+        case NODE_IF:           compile_if(node);           break;
+        case NODE_MATCH:        compile_match(node);        break;
+        case NODE_WHILE:        compile_while(node);        break;
+        case NODE_FOR_RANGE:    compile_for_range(node);    break;
+        case NODE_FOR_EACH:     compile_for_each(node);     break;
+        case NODE_REPEAT:       compile_repeat(node);       break;
+        case NODE_FN_DECL:      compile_fn_decl(node);      break;
+        case NODE_STRUCT_DECL:  compile_struct_decl(node);  break;
+        case NODE_ATTEMPT:      compile_attempt(node);      break;
+        case NODE_USE:          compile_use(node);          break;
+        case NODE_FROM_USE:     compile_from_use(node);     break;
+        case NODE_BREAK:        compile_break(node);        break;
+        case NODE_SKIP:         compile_skip(node);         break;
+
         case NODE_TRAIT:
         case NODE_IMPL:
         case NODE_OPERATOR_OVERLOAD:
-        case NODE_USE:
-        case NODE_FROM_USE:
-        case NODE_PASS:
-        case NODE_ATTEMPT:
-        case NODE_SPAWN:
-        case NODE_CHANNEL_CREATE:
+        case NODE_DECORATOR:
         case NODE_UNSAFE:
-            /* These are handled at runtime or in interpreter */
+            /* These require more complex VM support — emit warning */
+            fprintf(stderr, "[Compiler Warning] Feature not yet supported in VM mode (line %d)\n",
+                    node->line);
+            break;
+
+        case NODE_PASS:
+            /* No-op — intentionally empty */
+            break;
+
+        case NODE_SPAWN:
+            compile_spawn(node);
             break;
         
         case NODE_DEFER:
@@ -1008,10 +1534,6 @@ static void compile_node(ASTNode* node) {
             }
             break;
 
-        case NODE_BREAK:
-        case NODE_SKIP:
-            break;
-
         default:
             fprintf(stderr, "[Compiler] Node type %d not compiled (line %d)\n",
                     node->type, node->line);
@@ -1032,10 +1554,19 @@ ObjFunction* compile(ASTNode* program) {
     compiler.enclosing = NULL;
     compiler.local_count = 0;
     compiler.scope_depth = 0;
+    compiler.upvalue_count = 0;
     compiler.had_error = false;
+    compiler.loop_start = -1;
+    compiler.loop_exit_count = 0;
+    compiler.loop_continue_count = 0;
+    compiler.loop_scope_depth = 0;
     current = &compiler;
 
-    compile_node(program);
+     /* vm_run() pushes the script closure onto vm->stack[0] before executing,
+         so slot 0 is already occupied — reserve it here (same as fn declarations). */
+     add_local("");
+
+     compile_node(program);
     emit_byte(OP_HALT, 0);
 
     current = NULL;

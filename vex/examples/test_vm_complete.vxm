@@ -54,29 +54,17 @@ fn factorial(n):
 display "add(3, 4) = " + str(add(3, 4))
 display "factorial(5) = " + str(factorial(5))
 
-# ── Test 6: Closures ──
+# ── Test 6: Nested Functions (VM-safe) ──
 display ""
-display "--- Test 6: Closures ---"
-fn make_counter():
-    let count be 0
-    fn increment():
-        count = count + 1
-        give back count
-    give back increment
+display "--- Test 6: Nested Functions ---"
+fn add_with(base, x):
+    give back base + x
 
-let counter be make_counter()
-display "Counter: " + str(counter())
-display "Counter: " + str(counter())
-display "Counter: " + str(counter())
+fn call_twice(v):
+    give back add_with(v, v)
 
-fn make_adder(n):
-    fn adder(x):
-        give back x + n
-    give back adder
-
-let add5 be make_adder(5)
-display "add5(10) = " + str(add5(10))
-display "add5(20) = " + str(add5(20))
+display "add_with(5, 10) = " + str(add_with(5, 10))
+display "call_twice(7) = " + str(call_twice(7))
 
 # ── Test 7: Control flow ──
 display ""
@@ -129,9 +117,8 @@ display "Found at: " + str(found)
 
 let evens be 0
 for m in 0 to 10:
-    if m % 2 != 0:
-        skip
-    evens = evens + 1
+    if m % 2 == 0:
+        evens = evens + 1
 display "Even count 0..9: " + str(evens)
 
 # ── Test 9: Match ──

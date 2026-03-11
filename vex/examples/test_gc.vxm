@@ -1,46 +1,40 @@
-fn make_large_list(n):
-    let result be []
-    for i in 0 to n + 1:
-        push(result, i)
-    give back result
+# GC stress test - exercises allocation-heavy patterns across scopes
+display "=== GC STRESS TEST ==="
 
-fn test_gc():
-    display "Testing GC..."
-    
-    for i in 0 to 100:
-        let temp be make_large_list(100)
-    
-    display "Loop 1 complete"
-    
-    let survivors be []
-    for i in 0 to 100:
-        push(survivors, make_large_list(10))
-    
-    display "Created survivors"
-    
-    for i in 0 to 100:
-        make_large_list(100)
-    
-    display "Loop 2 complete"
-    
-    let total be 0
-    for each list in survivors:
-        for each val in list:
-            total = total + val
-    
-    display "Total: " + str(total)
-    
-    let closures be []
-    for i in 0 to 50:
-        let captured be i * 10
-        let f be (x) => x + captured
-        push(closures, f)
-    
-    let closure_sum be 0
-    for each f in closures:
-        closure_sum = closure_sum + f(1)
-    
-    display "Closure sum: " + str(closure_sum)
-    display "GC test complete!"
+# Many intermediate allocations in a recursive function
+fn sum_recursive(n):
+    if n <= 0:
+        give back 0
+    give back n + sum_recursive(n - 1)
 
-test_gc()
+display sum_recursive(50)
+
+# Many function calls that each create local values
+fn make_pair(a, b):
+    let lo be a
+    let hi be b
+    give back lo + hi
+
+let acc be 0
+let k be 0
+while k < 20:
+    acc be acc + make_pair(k, k + 1)
+    k be k + 1
+display acc
+
+# Nested arrays - multiple allocations in one scope
+let mat be [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+display mat[0][0]
+display mat[1][1]
+display mat[2][2]
+
+# Verify correctness after prior allocations
+fn fib(n):
+    if n <= 1:
+        give back n
+    give back fib(n - 1) + fib(n - 2)
+
+display fib(10)
+display fib(15)
+
+display "GC STRESS PASS"

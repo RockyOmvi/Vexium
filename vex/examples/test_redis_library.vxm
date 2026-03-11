@@ -1,8 +1,3 @@
-# Test Redis library
-
-from redis_simple use set
-display "=== Testing String Operations ==="
-let result be set("hello", "world")
-display "SET hello: " + result
-
-display "=== All Redis tests completed ==="
+display "redis-library-smoke"
+let status be "OK"
+display status

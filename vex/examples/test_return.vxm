@@ -1,8 +1,12 @@
-# Test give_back in function (Vexium syntax)
-
-fn test():
+fn forty_two():
     give back 42
 
-x be test()
-display x
+fn classify(n):
+    if n > 10:
+        give back "big"
+    give back "small"
+
+display forty_two()
+display classify(42)
+display classify(2)
 display "Done!"

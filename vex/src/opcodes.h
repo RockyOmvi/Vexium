@@ -40,6 +40,8 @@ typedef enum {
     OP_SET_GLOBAL,      /* Set global:    OP_SET_GLOBAL [name_idx_lo] [name_idx_hi] */
     OP_GET_LOCAL,       /* Get local:     OP_GET_LOCAL [slot] */
     OP_SET_LOCAL,       /* Set local:     OP_SET_LOCAL [slot] */
+    OP_GET_UPVALUE,     /* Get upvalue:   OP_GET_UPVALUE [slot] */
+    OP_SET_UPVALUE,     /* Set upvalue:   OP_SET_UPVALUE [slot] */
 
     /* ── Stack manipulation ── */
     OP_POP,             /* Discard TOS */
@@ -52,6 +54,8 @@ typedef enum {
 
     /* ── Functions ── */
     OP_CALL,            /* Call function: OP_CALL [argc] */
+    OP_CLOSURE,         /* Create closure from function constant + upvalue descriptors */
+    OP_CLOSE_UPVALUE,   /* Close captured local before popping */
     OP_RETURN,          /* Return from function */
 
     /* ── Strings ── */
@@ -78,6 +82,13 @@ typedef enum {
     OP_CHANNEL_CREATE,  /* Create a communication channel: OP_CHANNEL_CREATE */
     OP_CHANNEL_SEND,    /* Send value on channel: OP_CHANNEL_SEND */
     OP_CHANNEL_RECV,    /* Receive value from channel: OP_CHANNEL_RECV */
+    OP_USE_MODULE,      /* Import module into current scope: OP_USE_MODULE [name_idx_lo] [name_idx_hi] */
+    OP_USE_SYMBOL,      /* Import symbol from module: OP_USE_SYMBOL [module_idx_lo] [module_idx_hi] [symbol_idx_lo] [symbol_idx_hi] */
+
+    /* ── Fields & Structs ── */
+    OP_GET_FIELD,       /* Get field from instance: OP_GET_FIELD [name_idx_lo] [name_idx_hi] */
+    OP_SET_FIELD,       /* Set field on instance: OP_SET_FIELD [name_idx_lo] [name_idx_hi] */
+    OP_STRUCT,          /* Create struct instance: OP_STRUCT [field_count_lo] [field_count_hi] */
 
     /* ── Halt ── */
     OP_HALT             /* Stop execution */
@@ -195,7 +206,8 @@ typedef enum {
     OBJ_INSTANCE,
     OBJ_ERROR,
     OBJ_TENSOR,
-    OBJ_CHANNEL
+    OBJ_CHANNEL,
+    OBJ_TASK_HANDLE
 } ObjType;
 
 /* Common object header */
@@ -217,6 +229,7 @@ typedef struct {
 typedef struct {
     Obj obj;
     int arity;
+    int upvalue_count;
     char* name;        /* function name (for debugging) */
     int chunk_count;   /* bytecode count */
     int chunk_capacity;
@@ -291,6 +304,17 @@ typedef struct {
     int line;
 } ObjError;
 
+/* Forward declaration to avoid including task.h in this header. */
+typedef struct Task Task;
+
+/* Spawn/await handle object. Owns a Task* until awaited or VM teardown. */
+typedef struct {
+    Obj obj;
+    Task* task;
+    bool completed;
+    Value result;
+} ObjTaskHandle;
+
 /* ══════════════════════════════════════════════════════════════
  *  CHUNK (bytecode container)
  * ══════════════════════════════════════════════════════════════ */
@@ -317,6 +341,9 @@ ObjFunction* obj_function_new(const char* name);
 ObjArray* obj_array_new(int capacity);
 ObjMap* obj_map_new(void);
 void obj_map_set(ObjMap* map, ObjString* key, Value value);
+bool obj_map_get(ObjMap* map, ObjString* key, Value* out);
+ObjStructDef* obj_struct_def_new(ObjString* name, int field_count);
+ObjInstance* obj_instance_new(ObjStructDef* def);
 uint32_t hash_string(const char* key, int length);
 
 /* Value printing */

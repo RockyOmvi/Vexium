@@ -269,7 +269,7 @@ static Module* module_load_impl(ModuleCache* cache, const char* module_name,
     Module* module = malloc(sizeof(Module));
     module->name = string_dup(module_name);
     module->filepath = filepath;
-    module->exports = (void*)env_new(NULL);  /* Isolated module scope - cast to void* for Module definition */
+    module->exports = (void*)env_new(interp->global_env);  /* Module scope inherits builtins/global stdlib symbols */
     module->ast = (void*)program;  /* Keep AST alive for function references */
     module->is_loaded = false;
 

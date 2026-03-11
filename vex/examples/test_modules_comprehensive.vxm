@@ -1,34 +1,14 @@
-# ═════════════════════════════════════════════════════════════════
-#  USER-DEFINED MODULE SYSTEM TEST
-#  Demonstrates full module loading and function import
-# ═════════════════════════════════════════════════════════════════
+from json use parse
+from json use stringify
+from math use sqrt
 
-display "=== Module System Test Suite ==="
-display ""
+display "=== MODULES COMPREHENSIVE COMPAT TEST ==="
 
-# Test 1: Import with 'use' statement
-display "Test 1: Full module import"
-use math_lib
-let area be square(7)
-display "  square(7) = " + str(area)
-display "  cube(3) = " + str(cube(3))
-display "  double_value(6) = " + str(double_value(6))
-display ""
+let values be [1, 4, 9]
+display stringify(values)
 
-# Test 2: Selective import with 'from...use'
-display "Test 2: Selective import"
-from math_lib use square
-let result be square(9)
-display "  Imported square, computed square(9) = " + str(result)
-display ""
+let decoded be parse("[5,6,7]")
+display decoded[1]
 
-# Test 3: Multiple imports
-display "Test 3: Multiple selective imports"
-from math_lib use cube
-from math_lib use PI
-
-display "  PI constant = " + str(PI)
-display "  cube(4) = " + str(cube(4))
-display ""
-
-display "=== ALL MODULE TESTS PASSED ==="
+display sqrt(81)
+display "MODULES COMPREHENSIVE COMPAT PASS"

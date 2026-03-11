@@ -1,13 +1,504 @@
 #ifdef _WIN32
+/* Must include winsock2 BEFORE windows.h to avoid winsock1 collision */
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
 /* Must rename Windows' TokenType before including our headers */
 #define TokenType WindowsTokenType
 #include <windows.h>
 #undef TokenType
+#else
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <unistd.h>
 #endif
 #include "stdlib.h"
 #include "interpreter.h"
 #include <math.h>
 #include <time.h>
+
+typedef struct {
+    const char* current;
+    bool had_error;
+} StdJsonParser;
+
+typedef struct {
+    char* buffer;
+    size_t length;
+    size_t capacity;
+} StdJsonBuilder;
+
+static void std_json_set_error(StdJsonParser* parser) {
+    parser->had_error = true;
+}
+
+static void std_json_skip_whitespace(StdJsonParser* parser) {
+    while (*parser->current != '\0' && isspace((unsigned char)*parser->current)) {
+        parser->current++;
+    }
+}
+
+static char std_json_peek(StdJsonParser* parser) {
+    return *parser->current;
+}
+
+static char std_json_peek_next(StdJsonParser* parser) {
+    if (*parser->current == '\0') return '\0';
+    return parser->current[1];
+}
+
+static char std_json_advance(StdJsonParser* parser) {
+    return *parser->current++;
+}
+
+static bool std_json_match(StdJsonParser* parser, char expected) {
+    if (*parser->current != expected) return false;
+    parser->current++;
+    return true;
+}
+
+static bool std_json_is_delimiter(char c) {
+    return c == '\0' || c == ',' || c == ']' || c == '}' || isspace((unsigned char)c);
+}
+
+static VexValue std_json_parse_value(StdJsonParser* parser);
+
+static VexValue std_json_parse_string(StdJsonParser* parser) {
+    std_json_advance(parser);
+
+    const char* start = parser->current;
+    size_t len = 0;
+    while (std_json_peek(parser) != '"' && std_json_peek(parser) != '\0') {
+        if (std_json_peek(parser) == '\\') {
+            std_json_advance(parser);
+            if (std_json_peek(parser) == '\0') {
+                std_json_set_error(parser);
+                return vex_nothing();
+            }
+            char escape = std_json_advance(parser);
+            if (escape == 'u') {
+                for (int i = 0; i < 4; i++) {
+                    if (!isxdigit((unsigned char)std_json_peek(parser))) {
+                        std_json_set_error(parser);
+                        return vex_nothing();
+                    }
+                    std_json_advance(parser);
+                }
+                len += 6;
+                continue;
+            }
+        } else {
+            std_json_advance(parser);
+        }
+        len++;
+    }
+
+    if (std_json_peek(parser) != '"') {
+        std_json_set_error(parser);
+        return vex_nothing();
+    }
+
+    char* result = (char*)malloc(len + 1);
+    if (!result) {
+        std_json_set_error(parser);
+        return vex_nothing();
+    }
+
+    parser->current = start;
+    size_t out = 0;
+    while (std_json_peek(parser) != '"' && std_json_peek(parser) != '\0') {
+        if (std_json_peek(parser) == '\\') {
+            std_json_advance(parser);
+            if (std_json_peek(parser) == '\0') {
+                std_json_set_error(parser);
+                free(result);
+                return vex_nothing();
+            }
+            char escape = std_json_advance(parser);
+            switch (escape) {
+                case '"': result[out++] = '"'; break;
+                case '\\': result[out++] = '\\'; break;
+                case '/': result[out++] = '/'; break;
+                case 'b': result[out++] = '\b'; break;
+                case 'f': result[out++] = '\f'; break;
+                case 'n': result[out++] = '\n'; break;
+                case 'r': result[out++] = '\r'; break;
+                case 't': result[out++] = '\t'; break;
+                case 'u':
+                    result[out++] = '\\';
+                    result[out++] = 'u';
+                    for (int i = 0; i < 4; i++) {
+                        if (!isxdigit((unsigned char)std_json_peek(parser))) {
+                            std_json_set_error(parser);
+                            free(result);
+                            return vex_nothing();
+                        }
+                        result[out++] = std_json_advance(parser);
+                    }
+                    break;
+                default:
+                    result[out++] = escape;
+                    break;
+            }
+        } else {
+            result[out++] = std_json_advance(parser);
+        }
+    }
+
+    if (std_json_peek(parser) != '"') {
+        std_json_set_error(parser);
+        free(result);
+        return vex_nothing();
+    }
+
+    result[out] = '\0';
+    std_json_advance(parser);
+    VexValue value = vex_string(result, (int)out);
+    free(result);
+    return value;
+}
+
+static VexValue std_json_parse_number(StdJsonParser* parser) {
+    const char* start = parser->current;
+    if (std_json_peek(parser) == '-') std_json_advance(parser);
+    if (!isdigit((unsigned char)std_json_peek(parser))) {
+        std_json_set_error(parser);
+        return vex_nothing();
+    }
+    while (isdigit((unsigned char)std_json_peek(parser))) std_json_advance(parser);
+    if (std_json_peek(parser) == '.') {
+        if (!isdigit((unsigned char)std_json_peek_next(parser))) {
+            std_json_set_error(parser);
+            return vex_nothing();
+        }
+        std_json_advance(parser);
+        while (isdigit((unsigned char)std_json_peek(parser))) std_json_advance(parser);
+    }
+    if (std_json_peek(parser) == 'e' || std_json_peek(parser) == 'E') {
+        std_json_advance(parser);
+        if (std_json_peek(parser) == '+' || std_json_peek(parser) == '-') std_json_advance(parser);
+        if (!isdigit((unsigned char)std_json_peek(parser))) {
+            std_json_set_error(parser);
+            return vex_nothing();
+        }
+        while (isdigit((unsigned char)std_json_peek(parser))) std_json_advance(parser);
+    }
+    if (!std_json_is_delimiter(std_json_peek(parser))) {
+        std_json_set_error(parser);
+        return vex_nothing();
+    }
+
+    size_t len = (size_t)(parser->current - start);
+    char* num = (char*)malloc(len + 1);
+    if (!num) {
+        std_json_set_error(parser);
+        return vex_nothing();
+    }
+    memcpy(num, start, len);
+    num[len] = '\0';
+
+    char* end = NULL;
+    long long int_val = strtoll(num, &end, 10);
+    if (*end == '\0') {
+        free(num);
+        return vex_int((int64_t)int_val);
+    }
+
+    double float_val = strtod(num, &end);
+    if (*end != '\0') {
+        free(num);
+        std_json_set_error(parser);
+        return vex_nothing();
+    }
+    free(num);
+    return vex_float(float_val);
+}
+
+static void std_json_array_push(ValueArray* arr, VexValue value) {
+    if (arr->count >= arr->capacity) {
+        arr->capacity = arr->capacity == 0 ? 8 : arr->capacity * 2;
+        arr->items = (VexValue*)realloc(arr->items, sizeof(VexValue) * arr->capacity);
+    }
+    arr->items[arr->count++] = value;
+}
+
+static void std_json_map_set(ValueMap* map, const char* key, VexValue value) {
+    for (int i = 0; i < map->count; i++) {
+        if (strcmp(map->entries[i].key, key) == 0) {
+            map->entries[i].value = value;
+            return;
+        }
+    }
+    if (map->count >= map->capacity) {
+        map->capacity = map->capacity == 0 ? 8 : map->capacity * 2;
+        map->entries = (ValueMapEntry*)realloc(map->entries, sizeof(ValueMapEntry) * map->capacity);
+    }
+    ValueMapEntry* entry = &map->entries[map->count++];
+    entry->key = safe_strdup(key);
+    entry->value = value;
+}
+
+static VexValue std_json_parse_array(StdJsonParser* parser) {
+    std_json_advance(parser);
+    std_json_skip_whitespace(parser);
+
+    VexValue result;
+    result.type = VAL_ARRAY;
+    result.as.array_val = (ValueArray*)calloc(1, sizeof(ValueArray));
+
+    if (std_json_match(parser, ']')) {
+        return result;
+    }
+
+    while (true) {
+        std_json_skip_whitespace(parser);
+        VexValue elem = std_json_parse_value(parser);
+        if (parser->had_error) return vex_nothing();
+        std_json_array_push(result.as.array_val, elem);
+
+        std_json_skip_whitespace(parser);
+        if (std_json_match(parser, ',')) {
+            std_json_skip_whitespace(parser);
+            if (std_json_peek(parser) == ']') {
+                std_json_set_error(parser);
+                return vex_nothing();
+            }
+            continue;
+        }
+        if (std_json_match(parser, ']')) break;
+        std_json_set_error(parser);
+        return vex_nothing();
+    }
+
+    return result;
+}
+
+static VexValue std_json_parse_object(StdJsonParser* parser) {
+    std_json_advance(parser);
+    std_json_skip_whitespace(parser);
+
+    VexValue result;
+    result.type = VAL_MAP;
+    result.as.map_val = (ValueMap*)calloc(1, sizeof(ValueMap));
+
+    if (std_json_match(parser, '}')) {
+        return result;
+    }
+
+    while (true) {
+        std_json_skip_whitespace(parser);
+        if (std_json_peek(parser) != '"') {
+            std_json_set_error(parser);
+            return vex_nothing();
+        }
+
+        VexValue key = std_json_parse_string(parser);
+        if (parser->had_error || key.type != VAL_STRING) return vex_nothing();
+
+        std_json_skip_whitespace(parser);
+        if (!std_json_match(parser, ':')) {
+            std_json_set_error(parser);
+            return vex_nothing();
+        }
+
+        std_json_skip_whitespace(parser);
+        VexValue value = std_json_parse_value(parser);
+        if (parser->had_error) return vex_nothing();
+        std_json_map_set(result.as.map_val, key.as.string_val.data, value);
+
+        std_json_skip_whitespace(parser);
+        if (std_json_match(parser, ',')) {
+            std_json_skip_whitespace(parser);
+            if (std_json_peek(parser) == '}') {
+                std_json_set_error(parser);
+                return vex_nothing();
+            }
+            continue;
+        }
+        if (std_json_match(parser, '}')) break;
+        std_json_set_error(parser);
+        return vex_nothing();
+    }
+
+    return result;
+}
+
+static VexValue std_json_parse_value(StdJsonParser* parser) {
+    std_json_skip_whitespace(parser);
+    char c = std_json_peek(parser);
+    switch (c) {
+        case '"': return std_json_parse_string(parser);
+        case '[': return std_json_parse_array(parser);
+        case '{': return std_json_parse_object(parser);
+        case 't':
+            if (strncmp(parser->current, "true", 4) == 0 && std_json_is_delimiter(parser->current[4])) {
+                parser->current += 4;
+                return vex_bool(true);
+            }
+            break;
+        case 'f':
+            if (strncmp(parser->current, "false", 5) == 0 && std_json_is_delimiter(parser->current[5])) {
+                parser->current += 5;
+                return vex_bool(false);
+            }
+            break;
+        case 'n':
+            if (strncmp(parser->current, "null", 4) == 0 && std_json_is_delimiter(parser->current[4])) {
+                parser->current += 4;
+                return vex_nothing();
+            }
+            break;
+        default:
+            if (c == '-' || isdigit((unsigned char)c)) {
+                return std_json_parse_number(parser);
+            }
+            break;
+    }
+    std_json_set_error(parser);
+    return vex_nothing();
+}
+
+static void std_json_builder_init(StdJsonBuilder* builder) {
+    builder->capacity = 256;
+    builder->length = 0;
+    builder->buffer = (char*)malloc(builder->capacity);
+    builder->buffer[0] = '\0';
+}
+
+static void std_json_builder_ensure(StdJsonBuilder* builder, size_t needed) {
+    while (builder->length + needed >= builder->capacity) {
+        builder->capacity *= 2;
+    }
+    builder->buffer = (char*)realloc(builder->buffer, builder->capacity);
+}
+
+static void std_json_builder_append(StdJsonBuilder* builder, const char* str) {
+    size_t len = strlen(str);
+    std_json_builder_ensure(builder, len + 1);
+    memcpy(builder->buffer + builder->length, str, len + 1);
+    builder->length += len;
+}
+
+static void std_json_builder_append_char(StdJsonBuilder* builder, char c) {
+    std_json_builder_ensure(builder, 2);
+    builder->buffer[builder->length++] = c;
+    builder->buffer[builder->length] = '\0';
+}
+
+static void std_json_stringify_value(StdJsonBuilder* builder, VexValue value);
+
+static void std_json_stringify_string(StdJsonBuilder* builder, const char* str, int length) {
+    std_json_builder_append_char(builder, '"');
+    for (int i = 0; i < length; i++) {
+        unsigned char c = (unsigned char)str[i];
+        switch (c) {
+            case '"': std_json_builder_append(builder, "\\\""); break;
+            case '\\': std_json_builder_append(builder, "\\\\"); break;
+            case '\b': std_json_builder_append(builder, "\\b"); break;
+            case '\f': std_json_builder_append(builder, "\\f"); break;
+            case '\n': std_json_builder_append(builder, "\\n"); break;
+            case '\r': std_json_builder_append(builder, "\\r"); break;
+            case '\t': std_json_builder_append(builder, "\\t"); break;
+            default:
+                if (c >= 0x20) {
+                    std_json_builder_append_char(builder, (char)c);
+                } else {
+                    char buf[7];
+                    snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    std_json_builder_append(builder, buf);
+                }
+        }
+    }
+    std_json_builder_append_char(builder, '"');
+}
+
+static void std_json_stringify_array(StdJsonBuilder* builder, ValueArray* arr) {
+    std_json_builder_append_char(builder, '[');
+    for (int i = 0; i < arr->count; i++) {
+        if (i > 0) std_json_builder_append_char(builder, ',');
+        std_json_stringify_value(builder, arr->items[i]);
+    }
+    std_json_builder_append_char(builder, ']');
+}
+
+static void std_json_stringify_map(StdJsonBuilder* builder, ValueMap* map) {
+    std_json_builder_append_char(builder, '{');
+    for (int i = 0; i < map->count; i++) {
+        if (i > 0) std_json_builder_append_char(builder, ',');
+        std_json_stringify_string(builder, map->entries[i].key, (int)strlen(map->entries[i].key));
+        std_json_builder_append_char(builder, ':');
+        std_json_stringify_value(builder, map->entries[i].value);
+    }
+    std_json_builder_append_char(builder, '}');
+}
+
+static void std_json_stringify_value(StdJsonBuilder* builder, VexValue value) {
+    char buf[64];
+    switch (value.type) {
+        case VAL_NOTHING:
+            std_json_builder_append(builder, "null");
+            break;
+        case VAL_BOOL:
+            std_json_builder_append(builder, value.as.bool_val ? "true" : "false");
+            break;
+        case VAL_INT:
+            snprintf(buf, sizeof(buf), "%lld", (long long)value.as.int_val);
+            std_json_builder_append(builder, buf);
+            break;
+        case VAL_FLOAT:
+            snprintf(buf, sizeof(buf), "%.17g", value.as.float_val);
+            std_json_builder_append(builder, buf);
+            break;
+        case VAL_STRING:
+            std_json_stringify_string(builder, value.as.string_val.data, value.as.string_val.length);
+            break;
+        case VAL_ARRAY:
+            std_json_stringify_array(builder, value.as.array_val);
+            break;
+        case VAL_MAP:
+            std_json_stringify_map(builder, value.as.map_val);
+            break;
+        default:
+            std_json_builder_append(builder, "null");
+            break;
+    }
+}
+
+static VexValue json_parse_builtin(VexValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_STRING) {
+        fprintf(stderr, "Error: parse() expects 1 string argument\n");
+        return vex_nothing();
+    }
+
+    StdJsonParser parser;
+    parser.current = args[0].as.string_val.data;
+    parser.had_error = false;
+
+    VexValue value = std_json_parse_value(&parser);
+    std_json_skip_whitespace(&parser);
+    if (parser.had_error || *parser.current != '\0') {
+        return vex_nothing();
+    }
+    return value;
+}
+
+static VexValue json_stringify_builtin(VexValue* args, int argc) {
+    if (argc != 1) {
+        fprintf(stderr, "Error: stringify() expects 1 argument\n");
+        return vex_nothing();
+    }
+
+    StdJsonBuilder builder;
+    std_json_builder_init(&builder);
+    std_json_stringify_value(&builder, args[0]);
+    VexValue result = vex_string(builder.buffer, (int)builder.length);
+    free(builder.buffer);
+    return result;
+}
 
 /* ══════════════════════════════════════════════════════════════
  *  MATH MODULE
@@ -443,6 +934,192 @@ static VexValue sys_platform(VexValue* args, int argc) {
     #else
         return vex_string("unknown", 7);
     #endif
+}
+
+/* ══════════════════════════════════════════════════════════════
+ *  TIME MODULE
+ *
+ *  now, format, sleep, clock
+ * ══════════════════════════════════════════════════════════════ */
+
+static VexValue time_now(VexValue* args, int argc) {
+    UNUSED(args); UNUSED(argc);
+    return vex_float((double)time(NULL));
+}
+
+static VexValue time_format(VexValue* args, int argc) {
+    if (argc < 1 || argc > 2) {
+        fprintf(stderr, "Error: format() expects 1 or 2 arguments\n");
+        return vex_nothing();
+    }
+
+    time_t timestamp;
+    if (args[0].type == VAL_INT) {
+        timestamp = (time_t)args[0].as.int_val;
+    } else if (args[0].type == VAL_FLOAT) {
+        timestamp = (time_t)args[0].as.float_val;
+    } else {
+        fprintf(stderr, "Error: format() expects numeric timestamp\n");
+        return vex_nothing();
+    }
+
+    const char* format = "%Y-%m-%d %H:%M:%S";
+    if (argc == 2) {
+        if (args[1].type != VAL_STRING) {
+            fprintf(stderr, "Error: format() expects string format specifier\n");
+            return vex_nothing();
+        }
+        format = args[1].as.string_val.data;
+    }
+
+    struct tm* tm_info = localtime(&timestamp);
+    if (!tm_info) return vex_nothing();
+
+    char buffer[256];
+    size_t len = strftime(buffer, sizeof(buffer), format, tm_info);
+    if (len == 0) return vex_nothing();
+    return vex_string(buffer, (int)len);
+}
+
+/* ══════════════════════════════════════════════════════════════
+ *  HTTP MODULE
+ *
+ *  get(url) -> string or nothing
+ *  post(url, body) -> string or nothing
+ * ══════════════════════════════════════════════════════════════ */
+
+/* Parse http://host[:port]/path — returns false on failure */
+static bool stdlib_parse_url(const char* url, char* host, int* port, char* path) {
+    if (strncmp(url, "http://", 7) != 0) return false;
+    const char* p = url + 7;
+    int i = 0;
+    while (*p && *p != ':' && *p != '/') host[i++] = *p++;
+    host[i] = '\0';
+    *port = 80;
+    if (*p == ':') {
+        p++;
+        *port = 0;
+        while (*p >= '0' && *p <= '9') *port = *port * 10 + (*p++ - '0');
+    }
+    if (*p == '/') {
+        i = 0;
+        while (*p) path[i++] = *p++;
+        path[i] = '\0';
+    } else {
+        strcpy(path, "/");
+    }
+    return true;
+}
+
+/* Perform HTTP request; caller frees returned string (or NULL on error) */
+static char* stdlib_http_request(const char* method, const char* url, const char* body) {
+    char host[256]; int port; char path[512];
+    if (!stdlib_parse_url(url, host, &port, path)) return NULL;
+
+#ifdef _WIN32
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0) return NULL;
+#endif
+
+    SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock == INVALID_SOCKET) {
+#ifdef _WIN32
+        WSACleanup();
+#endif
+        return NULL;
+    }
+
+    struct hostent* server = gethostbyname(host);
+    if (!server) {
+#ifdef _WIN32
+        closesocket(sock); WSACleanup();
+#else
+        close((int)sock);
+#endif
+        return NULL;
+    }
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port   = htons((unsigned short)port);
+    memcpy(&addr.sin_addr.s_addr, server->h_addr, server->h_length);
+
+    if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+#ifdef _WIN32
+        closesocket(sock); WSACleanup();
+#else
+        close((int)sock);
+#endif
+        return NULL;
+    }
+
+    /* Build request */
+    char request[4096];
+    int blen = body ? (int)strlen(body) : 0;
+    snprintf(request, sizeof(request),
+        "%s %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: Vexium/1.0\r\nConnection: close\r\n",
+        method, path, host);
+    if (body && blen > 0) {
+        char ch[128];
+        snprintf(ch, sizeof(ch), "Content-Type: application/x-www-form-urlencoded\r\nContent-Length: %d\r\n", blen);
+        strncat(request, ch, sizeof(request) - strlen(request) - 1);
+    }
+    strncat(request, "\r\n", sizeof(request) - strlen(request) - 1);
+
+    send(sock, request, (int)strlen(request), 0);
+    if (body && blen > 0) send(sock, body, blen, 0);
+
+    /* Receive */
+    char* resp = (char*)malloc(65536); int total = 0, cap = 65536;
+    while (1) {
+        if (total + 4096 > cap) { cap *= 2; resp = (char*)realloc(resp, cap); }
+        int n = (int)recv(sock, resp + total, 4096, 0);
+        if (n <= 0) break;
+        total += n;
+    }
+    resp[total] = '\0';
+
+#ifdef _WIN32
+    closesocket(sock); WSACleanup();
+#else
+    close((int)sock);
+#endif
+
+    /* Strip headers */
+    char* body_start = strstr(resp, "\r\n\r\n");
+    if (body_start) {
+        size_t bl = strlen(body_start + 4);
+        char* result = (char*)malloc(bl + 1);
+        strcpy(result, body_start + 4);
+        free(resp);
+        return result;
+    }
+    return resp;
+}
+
+static VexValue http_get_builtin(VexValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_STRING) {
+        fprintf(stderr, "Error: http.get() expects 1 string argument\n");
+        return vex_nothing();
+    }
+    char* resp = stdlib_http_request("GET", args[0].as.string_val.data, NULL);
+    if (!resp) return vex_nothing();
+    VexValue result = vex_string(resp, (int)strlen(resp));
+    free(resp);
+    return result;
+}
+
+static VexValue http_post_builtin(VexValue* args, int argc) {
+    if (argc != 2 || args[0].type != VAL_STRING || args[1].type != VAL_STRING) {
+        fprintf(stderr, "Error: http.post() expects 2 string arguments\n");
+        return vex_nothing();
+    }
+    char* resp = stdlib_http_request("POST", args[0].as.string_val.data, args[1].as.string_val.data);
+    if (!resp) return vex_nothing();
+    VexValue result = vex_string(resp, (int)strlen(resp));
+    free(resp);
+    return result;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -902,6 +1579,14 @@ static StdlibEntry sys_entries[] = {
     {NULL, NULL}
 };
 
+static StdlibEntry time_entries[] = {
+    {"now",    time_now},
+    {"format", time_format},
+    {"sleep",  sys_sleep},
+    {"clock",  sys_clock},
+    {NULL, NULL}
+};
+
 static StdlibEntry collections_entries[] = {
     {"sort",       coll_sort},
     {"slice",      coll_slice},
@@ -932,6 +1617,18 @@ static StdlibEntry algo_entries[] = {
     {NULL, NULL}
 };
 
+static StdlibEntry json_entries[] = {
+    {"parse",     json_parse_builtin},
+    {"stringify", json_stringify_builtin},
+    {NULL, NULL}
+};
+
+static StdlibEntry http_entries[] = {
+    {"get",  http_get_builtin},
+    {"post", http_post_builtin},
+    {NULL, NULL}
+};
+
 /* Module table */
 typedef struct {
     const char* module_name;
@@ -943,8 +1640,11 @@ static ModuleTable modules[] = {
     {"string",      string_entries},
     {"file",        file_entries},
     {"sys",         sys_entries},
+    {"time",        time_entries},
     {"collections", collections_entries},
     {"algo",        algo_entries},
+    {"json",        json_entries},
+    {"http",        http_entries},
     {NULL, NULL}
 };
 

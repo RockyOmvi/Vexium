@@ -1,5 +1,12 @@
 #include "interpreter.h"
-#include "vex_module.h"
+#include "module_loader.h"
+#include "module_executor.h"
+#include "stdlib.h"
+#include "parser.h"
+#include <ctype.h>
+#include <math.h>
+
+static int map_entry_key_cmp(const void* a, const void* b);
 
 /* ══════════════════════════════════════════════════════════════
  *  VALUE CONSTRUCTORS
@@ -104,11 +111,21 @@ void vex_print_value(VexValue val) {
         case VAL_MAP:
             printf("{");
             if (val.as.map_val) {
-                for (int i = 0; i < val.as.map_val->count; i++) {
-                    if (i > 0) printf(", ");
-                    printf("\"%s\": ", val.as.map_val->entries[i].key);
-                    vex_print_value(val.as.map_val->entries[i].value);
+                int count = val.as.map_val->count;
+                ValueMapEntry** ordered = NULL;
+                if (count > 0) {
+                    ordered = (ValueMapEntry**)malloc(sizeof(ValueMapEntry*) * count);
+                    for (int i = 0; i < count; i++) {
+                        ordered[i] = &val.as.map_val->entries[i];
+                    }
+                    qsort(ordered, count, sizeof(ValueMapEntry*), map_entry_key_cmp);
                 }
+                for (int i = 0; i < count; i++) {
+                    if (i > 0) printf(", ");
+                    printf("\"%s\": ", ordered[i]->key);
+                    vex_print_value(ordered[i]->value);
+                }
+                free(ordered);
             }
             printf("}");
             break;
@@ -172,6 +189,12 @@ void env_release(Environment* env) {
     if (env->ref_count <= 0) {
         env_free(env);
     }
+}
+
+static int map_entry_key_cmp(const void* a, const void* b) {
+    const ValueMapEntry* ea = *(const ValueMapEntry* const*)a;
+    const ValueMapEntry* eb = *(const ValueMapEntry* const*)b;
+    return strcmp(ea->key, eb->key);
 }
 
 void env_define(Environment* env, const char* name, VexValue value, bool is_const) {
@@ -312,6 +335,19 @@ static VexValue builtin_str_cast(VexValue* args, int argc) {
 
 /* Global interpreter instance for throw to access */
 static Interpreter* g_interpreter = NULL;
+static ModuleCache* g_module_cache = NULL;
+
+static bool is_stdlib_module_name(const char* module_name) {
+    return strcmp(module_name, "math") == 0 ||
+           strcmp(module_name, "string") == 0 ||
+           strcmp(module_name, "file") == 0 ||
+           strcmp(module_name, "sys") == 0 ||
+           strcmp(module_name, "time") == 0 ||
+           strcmp(module_name, "collections") == 0 ||
+           strcmp(module_name, "algo") == 0 ||
+           strcmp(module_name, "json") == 0 ||
+           strcmp(module_name, "http") == 0;
+}
 
 /* throw(message) - Raise an exception */
 static VexValue builtin_throw(VexValue* args, int argc) {
@@ -384,11 +420,199 @@ static VexValue builtin_range(VexValue* args, int argc) {
     return result;
 }
 
+static VexValue builtin_sqrt(VexValue* args, int argc) {
+    if (argc != 1) return vex_nothing();
+    if (args[0].type == VAL_INT) return vex_float(sqrt((double)args[0].as.int_val));
+    if (args[0].type == VAL_FLOAT) return vex_float(sqrt(args[0].as.float_val));
+    return vex_nothing();
+}
+
+static VexValue builtin_abs(VexValue* args, int argc) {
+    if (argc != 1) return vex_nothing();
+    if (args[0].type == VAL_INT) return vex_int(args[0].as.int_val < 0 ? -args[0].as.int_val : args[0].as.int_val);
+    if (args[0].type == VAL_FLOAT) return vex_float(fabs(args[0].as.float_val));
+    return vex_nothing();
+}
+
+static VexValue builtin_pow(VexValue* args, int argc) {
+    if (argc != 2) return vex_nothing();
+    double base = (args[0].type == VAL_INT) ? (double)args[0].as.int_val : (args[0].type == VAL_FLOAT ? args[0].as.float_val : 0.0);
+    double exp = (args[1].type == VAL_INT) ? (double)args[1].as.int_val : (args[1].type == VAL_FLOAT ? args[1].as.float_val : 0.0);
+    double r = pow(base, exp);
+    if (args[0].type == VAL_INT && args[1].type == VAL_INT && r == (int64_t)r) return vex_int((int64_t)r);
+    return vex_float(r);
+}
+
+static VexValue builtin_min(VexValue* args, int argc) {
+    if (argc != 2) return vex_nothing();
+    double a = (args[0].type == VAL_INT) ? (double)args[0].as.int_val : (args[0].type == VAL_FLOAT ? args[0].as.float_val : 0.0);
+    double b = (args[1].type == VAL_INT) ? (double)args[1].as.int_val : (args[1].type == VAL_FLOAT ? args[1].as.float_val : 0.0);
+    double m = fmin(a, b);
+    if (m == (int64_t)m) return vex_int((int64_t)m);
+    return vex_float(m);
+}
+
+static VexValue builtin_max(VexValue* args, int argc) {
+    if (argc != 2) return vex_nothing();
+    double a = (args[0].type == VAL_INT) ? (double)args[0].as.int_val : (args[0].type == VAL_FLOAT ? args[0].as.float_val : 0.0);
+    double b = (args[1].type == VAL_INT) ? (double)args[1].as.int_val : (args[1].type == VAL_FLOAT ? args[1].as.float_val : 0.0);
+    double m = fmax(a, b);
+    if (m == (int64_t)m) return vex_int((int64_t)m);
+    return vex_float(m);
+}
+
+static VexValue builtin_floor(VexValue* args, int argc) {
+    if (argc != 1) return vex_nothing();
+    double v = (args[0].type == VAL_INT) ? (double)args[0].as.int_val : (args[0].type == VAL_FLOAT ? args[0].as.float_val : 0.0);
+    double f = floor(v);
+    if (f == (int64_t)f) return vex_int((int64_t)f);
+    return vex_float(f);
+}
+
+static VexValue builtin_ceil(VexValue* args, int argc) {
+    if (argc != 1) return vex_nothing();
+    double v = (args[0].type == VAL_INT) ? (double)args[0].as.int_val : (args[0].type == VAL_FLOAT ? args[0].as.float_val : 0.0);
+    double c = ceil(v);
+    if (c == (int64_t)c) return vex_int((int64_t)c);
+    return vex_float(c);
+}
+
+static VexValue builtin_upper(VexValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_STRING) return vex_nothing();
+    char* result = vex_strdup(args[0].as.string_val.data, args[0].as.string_val.length);
+    for (int i = 0; result[i]; i++) result[i] = (char)toupper((unsigned char)result[i]);
+    VexValue out = vex_string(result, (int)strlen(result));
+    free(result);
+    return out;
+}
+
+static VexValue builtin_lower(VexValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_STRING) return vex_nothing();
+    char* result = vex_strdup(args[0].as.string_val.data, args[0].as.string_val.length);
+    for (int i = 0; result[i]; i++) result[i] = (char)tolower((unsigned char)result[i]);
+    VexValue out = vex_string(result, (int)strlen(result));
+    free(result);
+    return out;
+}
+
+static VexValue builtin_trim(VexValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_STRING) return vex_nothing();
+    const char* s = args[0].as.string_val.data;
+    int len = args[0].as.string_val.length;
+    int start = 0;
+    int end = len;
+    while (start < end && isspace((unsigned char)s[start])) start++;
+    while (end > start && isspace((unsigned char)s[end - 1])) end--;
+    return vex_string(s + start, end - start);
+}
+
+static VexValue builtin_contains(VexValue* args, int argc) {
+    if (argc != 2 || args[0].type != VAL_STRING || args[1].type != VAL_STRING) return vex_bool(false);
+    return vex_bool(strstr(args[0].as.string_val.data, args[1].as.string_val.data) != NULL);
+}
+
+static bool vex_values_equal_simple(VexValue a, VexValue b) {
+    if (a.type != b.type) return false;
+    switch (a.type) {
+        case VAL_INT: return a.as.int_val == b.as.int_val;
+        case VAL_FLOAT: return a.as.float_val == b.as.float_val;
+        case VAL_BOOL: return a.as.bool_val == b.as.bool_val;
+        case VAL_NOTHING: return true;
+        case VAL_STRING:
+            return a.as.string_val.length == b.as.string_val.length &&
+                strcmp(a.as.string_val.data, b.as.string_val.data) == 0;
+        default: return false;
+    }
+}
+
+static VexValue builtin_sort(VexValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_ARRAY || !args[0].as.array_val) {
+        fprintf(stderr, "Error: sort() expects (array)\n");
+        return vex_nothing();
+    }
+    ValueArray* arr = args[0].as.array_val;
+    for (int i = 0; i < arr->count; i++) {
+        for (int j = i + 1; j < arr->count; j++) {
+            double ai = (arr->items[i].type == VAL_INT) ? (double)arr->items[i].as.int_val :
+                (arr->items[i].type == VAL_FLOAT ? arr->items[i].as.float_val : 0.0);
+            double aj = (arr->items[j].type == VAL_INT) ? (double)arr->items[j].as.int_val :
+                (arr->items[j].type == VAL_FLOAT ? arr->items[j].as.float_val : 0.0);
+            if (aj < ai) {
+                VexValue tmp = arr->items[i];
+                arr->items[i] = arr->items[j];
+                arr->items[j] = tmp;
+            }
+        }
+    }
+    return vex_nothing();
+}
+
+static VexValue builtin_reverse(VexValue* args, int argc) {
+    if (argc != 1 || args[0].type != VAL_ARRAY || !args[0].as.array_val) {
+        fprintf(stderr, "Error: reverse() expects (array)\n");
+        return vex_nothing();
+    }
+    ValueArray* arr = args[0].as.array_val;
+    for (int i = 0, j = arr->count - 1; i < j; i++, j--) {
+        VexValue tmp = arr->items[i];
+        arr->items[i] = arr->items[j];
+        arr->items[j] = tmp;
+    }
+    return vex_nothing();
+}
+
+static VexValue builtin_index_of(VexValue* args, int argc) {
+    if (argc != 2 || args[0].type != VAL_ARRAY || !args[0].as.array_val) {
+        fprintf(stderr, "Error: index_of() expects (array, value)\n");
+        return vex_int(-1);
+    }
+    ValueArray* arr = args[0].as.array_val;
+    for (int i = 0; i < arr->count; i++) {
+        if (vex_values_equal_simple(arr->items[i], args[1])) {
+            return vex_int(i);
+        }
+    }
+    return vex_int(-1);
+}
+
 /* ══════════════════════════════════════════════════════════════
  *  STRING INTERPOLATION
  * ══════════════════════════════════════════════════════════════ */
 
-static char* interpolate_string(const char* src, int src_len, Environment* env) {
+static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env);
+
+static bool eval_interpolated_expr(Interpreter* interp, const char* expr, Environment* env, VexValue* out) {
+    if (!expr || !*expr || !out) return false;
+
+    int expr_len = (int)strlen(expr);
+    int src_len = expr_len + 32;
+    char* src = (char*)malloc(src_len);
+    if (!src) return false;
+    snprintf(src, src_len, "let __interp_result be %s\n", expr);
+
+    Parser parser;
+    parser_init(&parser, src);
+    ASTNode* program = parser_parse(&parser);
+    free(src);
+
+    if (parser.had_error || !program || program->type != NODE_PROGRAM ||
+        program->as.program.statements.count <= 0) {
+        ast_free(program);
+        return false;
+    }
+
+    ASTNode* stmt = program->as.program.statements.items[0];
+    if (!stmt || (stmt->type != NODE_LET_DECL && stmt->type != NODE_CONST_DECL) || !stmt->as.var_decl.value) {
+        ast_free(program);
+        return false;
+    }
+
+    *out = eval(interp, stmt->as.var_decl.value, env);
+    ast_free(program);
+    return true;
+}
+
+static char* interpolate_string(Interpreter* interp, const char* src, int src_len, Environment* env) {
     /* Budget: grow buffer as needed */
     int cap = src_len * 2 + 1;
     char* result = (char*)malloc(cap);
@@ -405,17 +629,43 @@ static char* interpolate_string(const char* src, int src_len, Environment* env) 
                 else if (src[i] == '}') depth--;
                 if (depth > 0) i++;
             }
-            /* Extract expression (may contain dots like self.name) */
+            /* Extract expression (may contain dots, calls, indexing, etc.) */
             int name_len = i - start;
             char* expr = vex_strdup(src + start, name_len);
 
-            /* Resolve dot-access: split on '.' and walk fields */
+            /* Trim expression whitespace inside braces. */
+            int b = 0;
+            int e = name_len;
+            while (b < e && isspace((unsigned char)expr[b])) b++;
+            while (e > b && isspace((unsigned char)expr[e - 1])) e--;
+            char* trimmed_expr = vex_strdup(expr + b, e - b);
+
+            /* Unescape common string escapes so parser sees normal quotes. */
+            int tlen = (int)strlen(trimmed_expr);
+            char* parse_expr = (char*)malloc(tlen + 1);
+            int pi = 0;
+            for (int ti = 0; ti < tlen; ti++) {
+                if (trimmed_expr[ti] == '\\' && ti + 1 < tlen &&
+                    (trimmed_expr[ti + 1] == '"' || trimmed_expr[ti + 1] == '\\')) {
+                    parse_expr[pi++] = trimmed_expr[++ti];
+                } else {
+                    parse_expr[pi++] = trimmed_expr[ti];
+                }
+            }
+            parse_expr[pi] = '\0';
+
             char* vs;
-            char* dot = strchr(expr, '.');
-            if (dot) {
+            VexValue interp_val;
+            if (eval_interpolated_expr(interp, parse_expr, env, &interp_val)) {
+                vs = vex_value_to_string(interp_val);
+                free(parse_expr);
+            } else {
+                /* Fallback path: simple dot/member lookup for robustness. */
+                char* dot = strchr(trimmed_expr, '.');
+                if (dot) {
                 /* Split: base.field1.field2... */
                 *dot = '\0';
-                VexValue* base_val = env_get(env, expr);
+                VexValue* base_val = env_get(env, trimmed_expr);
                 if (base_val) {
                     VexValue current = *base_val;
                     char* field_start = dot + 1;
@@ -450,16 +700,19 @@ static char* interpolate_string(const char* src, int src_len, Environment* env) 
                 } else {
                     vs = vex_strdup("nothing", 7);
                 }
-            } else {
-                VexValue* val = env_get(env, expr);
-                if (val) vs = vex_value_to_string(*val);
-                else vs = vex_strdup("nothing", 7);
+                } else {
+                    VexValue* direct = env_get(env, trimmed_expr);
+                    if (direct) vs = vex_value_to_string(*direct);
+                    else vs = vex_strdup("nothing", 7);
+                }
+                free(parse_expr);
             }
 
             int vs_len = (int)strlen(vs);
             while (out + vs_len + 1 >= cap) { cap *= 2; result = (char*)realloc(result, cap); }
             memcpy(result + out, vs, vs_len);
             out += vs_len;
+            free(trimmed_expr);
             free(expr);
             free(vs);
         } else {
@@ -671,6 +924,61 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
             free(args);
             return result;
         }
+
+        if (obj.type == VAL_ARRAY) {
+            if (strcmp(method_name, "push") == 0) {
+                if (argc != 1) {
+                    fprintf(stderr, "Error [line %d]: array.push() expects 1 argument\n", node->line);
+                    interp->had_error = true;
+                    return vex_nothing();
+                }
+                VexValue val = eval(interp, node->as.call.args.items[0], env);
+                VexValue call_args[2] = { obj, val };
+                return builtin_push(call_args, 2);
+            }
+            if (strcmp(method_name, "pop") == 0) {
+                VexValue call_args[1] = { obj };
+                return builtin_pop(call_args, 1);
+            }
+            if (strcmp(method_name, "length") == 0) {
+                return vex_int(obj.as.array_val ? obj.as.array_val->count : 0);
+            }
+        }
+
+        if (obj.type == VAL_STRING) {
+            if (strcmp(method_name, "upper") == 0) {
+                char* result = vex_strdup(obj.as.string_val.data, obj.as.string_val.length);
+                for (int i = 0; result[i]; i++) result[i] = (char)toupper((unsigned char)result[i]);
+                VexValue out = vex_string(result, (int)strlen(result));
+                free(result);
+                return out;
+            }
+            if (strcmp(method_name, "lower") == 0) {
+                char* result = vex_strdup(obj.as.string_val.data, obj.as.string_val.length);
+                for (int i = 0; result[i]; i++) result[i] = (char)tolower((unsigned char)result[i]);
+                VexValue out = vex_string(result, (int)strlen(result));
+                free(result);
+                return out;
+            }
+            if (strcmp(method_name, "length") == 0) {
+                return vex_int(obj.as.string_val.length);
+            }
+            if (strcmp(method_name, "contains") == 0) {
+                if (argc != 1) {
+                    fprintf(stderr, "Error [line %d]: string.contains() expects 1 argument\n", node->line);
+                    interp->had_error = true;
+                    return vex_nothing();
+                }
+                VexValue needle = eval(interp, node->as.call.args.items[0], env);
+                if (needle.type != VAL_STRING) {
+                    fprintf(stderr, "Error [line %d]: string.contains() expects string argument\n", node->line);
+                    interp->had_error = true;
+                    return vex_nothing();
+                }
+                return vex_bool(strstr(obj.as.string_val.data, needle.as.string_val.data) != NULL);
+            }
+        }
+
         /* Not an instance — fall through to normal field access + call */
     }
 
@@ -889,6 +1197,7 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
         case NODE_STRING_LITERAL: {
             /* Handle string interpolation */
             char* interp_str = interpolate_string(
+                interp,
                 node->as.string_literal.value,
                 node->as.string_literal.length, env);
             VexValue result = vex_string(interp_str, (int)strlen(interp_str));
@@ -1310,6 +1619,13 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return eval(interp, node->as.await.expr, env);
         }
 
+        /* ── Yield expression ── */
+        case NODE_YIELD: {
+            /* Yield parsing exists, but generator suspension isn't implemented.
+             * Evaluate and return expression to avoid unhandled-node errors. */
+            return eval(interp, node->as.yield.expr, env);
+        }
+
         /* ── Trait declaration ── */
         case NODE_TRAIT: {
             VexValue td;
@@ -1461,9 +1777,39 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
 
         /* ── Use module ── */
         case NODE_USE: {
-            if (!stdlib_load_module(node->as.use_stmt.module_name, env)) {
-                fprintf(stderr, "Error [line %d]: Unknown module '%s'\n",
-                    node->line, node->as.use_stmt.module_name);
+            const char* module_name = node->as.use_stmt.module_name;
+            char* module_path = NULL;
+
+            if (is_stdlib_module_name(module_name)) {
+                if (!stdlib_load_module(module_name, env)) {
+                    fprintf(stderr, "Error [line %d]: Unknown module '%s'\n", node->line, module_name);
+                    interp->had_error = true;
+                }
+                return vex_nothing();
+            }
+
+            module_path = module_resolve_path(module_name);
+
+            if (module_path) {
+                free(module_path);
+
+                if (!g_module_cache) {
+                    g_module_cache = module_cache_create();
+                }
+
+                Module* module = module_load(g_module_cache, module_name, interp);
+                if (!module || !module->is_loaded) {
+                    interp->had_error = true;
+                    return vex_nothing();
+                }
+
+                /* Import all exported symbols from user module into current scope. */
+                Environment* module_env = (Environment*)module->exports;
+                for (int i = 0; i < module_env->count; i++) {
+                    env_define(env, module_env->entries[i].name, module_env->entries[i].value, false);
+                }
+            } else if (!stdlib_load_module(module_name, env)) {
+                fprintf(stderr, "Error [line %d]: Unknown module '%s'\n", node->line, module_name);
                 interp->had_error = true;
             }
             return vex_nothing();
@@ -1471,8 +1817,41 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
 
         /* ── From module use symbol ── */
         case NODE_FROM_USE: {
-            if (!stdlib_load_symbol(node->as.from_use.module_name,
-                    node->as.from_use.import_name, env)) {
+            const char* module_name = node->as.from_use.module_name;
+            const char* import_name = node->as.from_use.import_name;
+            char* module_path = NULL;
+
+            if (is_stdlib_module_name(module_name)) {
+                if (!stdlib_load_symbol(module_name, import_name, env)) {
+                    interp->had_error = true;
+                }
+                return vex_nothing();
+            }
+
+            module_path = module_resolve_path(module_name);
+
+            if (module_path) {
+                free(module_path);
+
+                if (!g_module_cache) {
+                    g_module_cache = module_cache_create();
+                }
+
+                Module* module = module_load(g_module_cache, module_name, interp);
+                if (!module || !module->is_loaded) {
+                    interp->had_error = true;
+                    return vex_nothing();
+                }
+
+                Environment* module_env = (Environment*)module->exports;
+                VexValue* symbol = env_get(module_env, import_name);
+                if (!symbol) {
+                    fprintf(stderr, "Error: Symbol '%s' not exported by module '%s'\n", import_name, module_name);
+                    interp->had_error = true;
+                } else {
+                    env_define(env, import_name, *symbol, false);
+                }
+            } else if (!stdlib_load_symbol(module_name, import_name, env)) {
                 interp->had_error = true;
             }
             return vex_nothing();
@@ -1572,6 +1951,48 @@ void interpreter_init(Interpreter* interp) {
     v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_range; v.as.builtin_fn.name = "range";
     env_define(interp->global_env, "range", v, true);
 
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_sort; v.as.builtin_fn.name = "sort";
+    env_define(interp->global_env, "sort", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_reverse; v.as.builtin_fn.name = "reverse";
+    env_define(interp->global_env, "reverse", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_index_of; v.as.builtin_fn.name = "index_of";
+    env_define(interp->global_env, "index_of", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_sqrt; v.as.builtin_fn.name = "sqrt";
+    env_define(interp->global_env, "sqrt", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_abs; v.as.builtin_fn.name = "abs";
+    env_define(interp->global_env, "abs", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_pow; v.as.builtin_fn.name = "pow";
+    env_define(interp->global_env, "pow", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_min; v.as.builtin_fn.name = "min";
+    env_define(interp->global_env, "min", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_max; v.as.builtin_fn.name = "max";
+    env_define(interp->global_env, "max", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_floor; v.as.builtin_fn.name = "floor";
+    env_define(interp->global_env, "floor", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_ceil; v.as.builtin_fn.name = "ceil";
+    env_define(interp->global_env, "ceil", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_upper; v.as.builtin_fn.name = "upper";
+    env_define(interp->global_env, "upper", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_lower; v.as.builtin_fn.name = "lower";
+    env_define(interp->global_env, "lower", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_trim; v.as.builtin_fn.name = "trim";
+    env_define(interp->global_env, "trim", v, true);
+
+    v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_contains; v.as.builtin_fn.name = "contains";
+    env_define(interp->global_env, "contains", v, true);
+
     /* Global constants */
     env_define(interp->global_env, "true", vex_bool(true), true);
     env_define(interp->global_env, "false", vex_bool(false), true);
@@ -1579,6 +2000,10 @@ void interpreter_init(Interpreter* interp) {
 
 void interpreter_free(Interpreter* interp) {
     env_release(interp->global_env);
+    if (g_module_cache) {
+        module_cache_free(g_module_cache);
+        g_module_cache = NULL;
+    }
 }
 
 void interpret_program(Interpreter* interp, ASTNode* program) {

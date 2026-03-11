@@ -40,8 +40,7 @@ fn softmax(arr):
     
     let result be []
     for each val in arr:
-        append (math.exp(val - max_val) / sum) to result
-    
+        push(result, (math.exp(val - max_val) / sum))
     give back result
 
 
@@ -51,8 +50,8 @@ fn matrix_create(rows, cols, value):
     for i in 0 to rows:
         let row be []
         for j in 0 to cols:
-            append value to row
-        append row to matrix
+            push(row, value)
+        push(matrix, row)
     give back matrix
 
 fn matrix_random(rows, cols):
@@ -61,8 +60,8 @@ fn matrix_random(rows, cols):
         let row be []
         for j in 0 to cols:
             let scale be math.sqrt(2.0 / (rows + cols))
-            append (math.random() * 2 - 1) * scale to row
-        append row to matrix
+            push(row, (math.random() * 2 - 1) * scale)
+        push(matrix, row)
     give back matrix
 
 fn matrix_zeros(rows, cols):
@@ -172,16 +171,15 @@ struct Dense:
         for each row in z:
             for j in 0 to self.output_size:
                 if self.activation_fn == "sigmoid":
-                    append sigmoid(row[j]) to output
+                    push(output, sigmoid(row[j]))
                 elif self.activation_fn == "relu":
-                    append relu(row[j]) to output
+                    push(output, relu(row[j]))
                 elif self.activation_fn == "tanh":
-                    append tanh_activation(row[j]) to output
+                    push(output, tanh_activation(row[j]))
                 elif self.activation_fn == "none":
-                    append row[j] to output
+                    push(output, row[j])
                 else:
-                    append row[j] to output
-        
+                    push(output, row[j])
         give back output
     
     fn get_weights():
@@ -199,8 +197,7 @@ struct NeuralNetwork:
         set self.layers be []
     
     fn add_layer(layer):
-        append layer to self.layers
-    
+        push(self.layers, layer)
     fn predict(input):
         let current be input
         for each layer in self.layers:

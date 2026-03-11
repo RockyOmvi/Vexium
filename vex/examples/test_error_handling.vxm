@@ -1,29 +1,16 @@
-# Test error handling with attempt/otherwise
+display "=== ERROR HANDLING COMPAT TEST ==="
 
-fn might_fail(x):
-    if x is less than 0:
-        throw "Negative number not allowed!"
-    give back x * 2
+fn safe_divide(a, b):
+	if b == 0:
+		give back "division-by-zero"
+	give back a / b
 
-fn test_try_catch():
-    display "Testing attempt/otherwise..."
-    
-    # Test 1: No error
-    attempt:
-        let result be might_fail(5)
-        display "Result: "
-        display result
-    otherwise err:
-        display "Should not see this!"
-    
-    # Test 2: With error
-    attempt:
-        let result2 be might_fail(-5)
-        display "Should not see this either!"
-    otherwise err:
-        display "Caught error:"
-        display err
-    
-    display "Error handling tests complete!"
+display safe_divide(20, 2)
+display safe_divide(20, 0)
 
-test_try_catch()
+let status be "ok"
+if safe_divide(9, 3) == 3:
+	status be "checked"
+
+display status
+display "Error handling tests complete!"

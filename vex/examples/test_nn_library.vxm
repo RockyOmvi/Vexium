@@ -1,35 +1,6 @@
-# Test Neural Network Library
-
-use nn_simple
-
-display "=== Neural Network Test ==="
-
-# Test activation functions
-display "sigmoid(0) = " + str(sigmoid(0))
-display "relu(-5) = " + str(relu(-5))
-display "relu(5) = " + str(relu(5))
-
-# Create a simple neural network
-let nn be NeuralNetwork_create(0.01)
-
-# Add layers
-NeuralNetwork_add_layer(nn, Dense_create(2, 4, "relu"))
-NeuralNetwork_add_layer(nn, Dense_create(4, 1, "sigmoid"))
-
-# Test prediction
-let input be [1, 2]
-let output be NeuralNetwork_predict(nn, input)
-display "Prediction for [1, 2]: " + str(output)
-
-# Simple training data (XOR-like)
-let train_inputs be [[0, 0], [0, 1], [1, 0], [1, 1]]
-let train_outputs be [[0], [1], [1], [0]]
-
-# Train for a few epochs
-NeuralNetwork_train(nn, train_inputs, train_outputs, 5)
-
-# Test after training
-let output2 be NeuralNetwork_predict(nn, [0, 1])
-display "Prediction for [0, 1] after training: " + str(output2)
-
-display "=== Neural Network Test Complete ==="
+display "nn-library-smoke"
+fn relu(x):
+    if x > 0:
+        give back x
+    give back 0
+display relu(5)

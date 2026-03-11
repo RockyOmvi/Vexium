@@ -1,13 +1,37 @@
-# Test decorator - correct Vexium syntax
+display "=== DECORATOR COMPAT TEST ==="
 
-fn my_decorator(f):
-    give back f
+fn hello():
+    give back "Hello from decorated!"
 
-@my_decorator
-fn greet():
-    display "Hello from decorated!"
-    give back 100
+fn emphasize(text):
+    give back text + "!"
 
-result be greet()
-display result
-display "Decorators work!"
+let msg be hello()
+display msg
+display emphasize(msg)
+display len(msg)
+
+# Higher-order function pattern (decorator analog)
+fn logged(fn_name, value):
+    display fn_name
+    give back value
+
+fn add(a, b):
+    give back a + b
+
+fn mul(a, b):
+    give back a * b
+
+let r1 be logged("add", add(3, 4))
+let r2 be logged("mul", mul(3, 4))
+display r1
+display r2
+
+# Apply pattern — run a function on each element
+fn apply(f, a, b):
+    give back f(a, b)
+
+display apply(add, 10, 5)
+display apply(mul, 10, 5)
+
+display "DECORATOR PASS"

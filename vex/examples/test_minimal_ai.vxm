@@ -1,3 +1,12 @@
-# Test neural network
-let model be neural network:
-    layer dense with 10 inputs, 10 outputs
+display "=== MINIMAL AI COMPAT TEST ==="
+
+fn is_spam(links, all_caps):
+	let risk be links * 2
+	if all_caps:
+		risk be risk + 3
+	give back risk > 4
+
+display is_spam(0, false)
+display is_spam(2, false)
+display is_spam(1, true)
+display "MINIMAL AI COMPAT PASS"

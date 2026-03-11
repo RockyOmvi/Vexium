@@ -69,7 +69,7 @@ static void add_module(ModuleRegistry* reg, const char* name, Environment* env) 
     }
     
     ModuleEntry* entry = &reg->modules[reg->count++];
-    entry->name = strdup(name);
+    entry->name = safe_strdup(name);
     entry->env = env;
     entry->exports = NULL;
     entry->export_count = 0;
@@ -99,11 +99,11 @@ static char* get_module_base_path(void) {
     /* Check environment variable first */
     char* env_path = getenv("VEXIUM_PATH");
     if (env_path) {
-        return strdup(env_path);
+        return safe_strdup(env_path);
     }
     
     /* Default to lib/ subdirectory relative to executable */
-    return strdup("lib");
+    return safe_strdup("lib");
 }
 
 /* Resolve module name to file path */

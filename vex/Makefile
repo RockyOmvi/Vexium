@@ -2,11 +2,11 @@
 CC = gcc
 CFLAGS = -std=c99 -O2
 SRC_DIR = src
-SOURCES = $(SRC_DIR)/main.c $(SRC_DIR)/lexer.c $(SRC_DIR)/token.c $(SRC_DIR)/ast.c $(SRC_DIR)/parser.c $(SRC_DIR)/interpreter.c $(SRC_DIR)/stdlib.c $(SRC_DIR)/compiler.c $(SRC_DIR)/vm.c $(SRC_DIR)/module_loader.c $(SRC_DIR)/json.c $(SRC_DIR)/time_module.c $(SRC_DIR)/http_module.c $(SRC_DIR)/http_server.c $(SRC_DIR)/gc.c $(SRC_DIR)/bytecode_cache.c $(SRC_DIR)/task.c $(SRC_DIR)/type_system.c $(SRC_DIR)/package.c $(SRC_DIR)/tensor.c
+SOURCES = $(SRC_DIR)/main.c $(SRC_DIR)/lexer.c $(SRC_DIR)/token.c $(SRC_DIR)/ast.c $(SRC_DIR)/parser.c $(SRC_DIR)/interpreter.c $(SRC_DIR)/stdlib.c $(SRC_DIR)/stdlib_extended.c $(SRC_DIR)/module_executor.c $(SRC_DIR)/compiler.c $(SRC_DIR)/vm.c $(SRC_DIR)/module_loader.c $(SRC_DIR)/json.c $(SRC_DIR)/time_module.c $(SRC_DIR)/http_module.c $(SRC_DIR)/http_server.c $(SRC_DIR)/gc.c $(SRC_DIR)/bytecode_cache.c $(SRC_DIR)/task.c $(SRC_DIR)/type_system.c $(SRC_DIR)/package.c $(SRC_DIR)/tensor.c
 LDFLAGS = -lm -lws2_32
 TARGET = vexium.exe
 # Pre-build cleanup to avoid permission issues on Windows (e.g., if the binary is still in use)
-PREBUILD := @echo "Pre-build cleanup: terminating vexium.exe if running" && taskkill /IM vexium.exe /F 2>nul || true
+PREBUILD := @cmd /c "echo Pre-build cleanup: terminating vexium.exe if running & taskkill /IM vexium.exe /F 1>nul 2>nul & exit /b 0"
 
 all: $(TARGET)
 

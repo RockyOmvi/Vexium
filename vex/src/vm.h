@@ -40,6 +40,10 @@ typedef struct {
     size_t bytes_allocated;
     size_t next_gc;
 
+    /* Captured return value for top-level execution (used by task await). */
+    bool has_last_result;
+    Value last_result;
+
     Obj* objects;          /* head of all allocated objects (for GC) */
 } VM;
 

@@ -1,7 +1,13 @@
-# Simple function test
-
 fn add(a, b):
     give back a + b
 
-result be add(5, 10)
-display result
+fn mul(a, b):
+    give back a * b
+
+fn combine(x, y):
+    let sum be add(x, y)
+    give back mul(sum, 2)
+
+display add(7, 8)
+display mul(3, 5)
+display combine(4, 6)

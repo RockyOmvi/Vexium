@@ -1,4 +1,6 @@
 # Test defer statement
+display "=== DEFER TEST ==="
+
 fn test_defer():
     defer 1 + 1
     give back 42
@@ -6,3 +8,23 @@ fn test_defer():
 let result be test_defer()
 display "Result:"
 display result
+
+# Defer with multiple expressions
+fn multi_defer():
+    defer 100 * 2
+    defer 100 * 3
+    give back 7
+
+let r2 be multi_defer()
+display r2
+
+# Defer inside conditional
+fn cond_defer(x):
+    if x > 0:
+        defer x * x
+    give back x + 1
+
+display cond_defer(5)
+display cond_defer(-1)
+
+display "DEFER PASS"

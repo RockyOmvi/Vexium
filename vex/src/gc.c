@@ -104,6 +104,14 @@ static void gc_mark_object(Obj* obj) {
             gc_mark_object((Obj*)err->file);
             break;
         }
+
+        case OBJ_TASK_HANDLE: {
+            ObjTaskHandle* handle = (ObjTaskHandle*)obj;
+            if (handle->completed) {
+                gc_mark_value(handle->result);
+            }
+            break;
+        }
     }
 }
 
@@ -203,6 +211,9 @@ static void gc_sweep(VM* vm) {
                     size = sizeof(ObjError);
                     break;
                 }
+                case OBJ_TASK_HANDLE:
+                    size = sizeof(ObjTaskHandle);
+                    break;
             }
             
             if (vm->bytes_allocated >= size) {

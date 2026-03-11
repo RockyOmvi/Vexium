@@ -2,7 +2,7 @@
   "name": "vexium-language",
   "displayName": "Vexium Language",
   "description": "Language support for Vexium programming language",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "publisher": "vexium",
   "engines": {
     "vscode": "^1.70.0"

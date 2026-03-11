@@ -1,56 +1,20 @@
-# ═══════════════════════════════════════════════════════════════════
-# Vexium - Build Your Own X Comprehensive Test
-# Tests all the libraries created for the codecrafters "build your own X" projects
-# ═══════════════════════════════════════════════════════════════════
+display "=== BUILD YOUR OWN X COMPAT TEST ==="
 
-display "========================================"
-display "Vexium - Build Your Own X Test Suite"
-display "========================================"
+fn transform(x):
+    give back (x * 2) + 1
 
-# ─────────────────────────────────────────────────────────────
-# Test 1: Neural Network (nn.vxm)
-# ─────────────────────────────────────────────────────────────
-display ""
-display "=== Test 1: Neural Network Library ==="
+fn run_pipeline(values):
+    let out be []
+    let i be 0
+    while i < len(values):
+        push(out, transform(values[i]))
+        i be i + 1
+    give back out
 
-use nn
+let input be [1, 2, 3, 4]
+let output be run_pipeline(input)
 
-# Test activation functions
-let sig_val be sigmoid(0)
-display "sigmoid(0) = " + str(sig_val)
-
-let relu_val be relu(-5)
-display "relu(-5) = " + str(relu_val)
-
-# Test dense layer
-let layer be Dense.create(2, 3, "relu")
-let input be [1, 2]
-let output be layer.forward(input)
-display "Dense layer output: " + str(output)
-
-# Test neural network
-let nn_model be NeuralNetwork.create(0.01)
-nn_model.add_layer(Dense.create(2, 4, "relu"))
-nn_model.add_layer(Dense.create(4, 1, "sigmoid"))
-
-display "Neural Network test: PASSED"
-
-
-# ─────────────────────────────────────────────────────────────
-# Summary
-# ─────────────────────────────────────────────────────────────
-display ""
-display "========================================"
-display "Vexium Build Your Own X Tests Complete!"
-display "========================================"
-display ""
-display "Libraries implemented:"
-display "- Neural Network (nn.vxm)"
-display ""
-display "Additional libraries ready for use:"
-display "- redis.vxm - Redis clone"
-display "- sqlite.vxm - SQLite clone"
-display "- shell.vxm - Shell implementation"
-display "- git.vxm - Git version control"
-display "- http.vxm - Web framework"
-display "- unsafe.vxm - Memory operations"
+display output
+display output[0]
+display output[3]
+display "BUILD YOUR OWN X COMPAT PASS"

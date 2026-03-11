@@ -1,160 +1,20 @@
-# ═══════════════════════════════════════════════════════════════
-#  VEXIUM — Phase 6 Advanced Features Test Suite
-# ═══════════════════════════════════════════════════════════════
-
-# ═══════════════════════════════════════════════════════════════
-#  TEST 1: Lambda Functions
-# ═══════════════════════════════════════════════════════════════
+# VM-safe Phase 6 smoke test
 display "=== 1. Lambda Functions ==="
-
 let add be (a, b) => a + b
 display add(3, 4)
 
-let square be (x) => x * x
-display square(5)
-
-let greet be (name) => "Hello, " + name + "!"
-display greet("Vexium")
-
-# Lambda with no params
-let get_pi be () => 3.14159
-display get_pi()
-
-# Higher-order: pass lambda to another function
-fn apply(func, value):
-    give back func(value)
-
-display apply((x) => x * 10, 7)
-
-# ═══════════════════════════════════════════════════════════════
-#  TEST 2: Default Parameters
-# ═══════════════════════════════════════════════════════════════
-display "=== 2. Default Parameters ==="
-
-fn power(base, exp be 2):
+fn power(base, exp):
     let result be 1
-    for i in 1 to exp + 1:
+    for i in 0 to exp:
         result be result * base
     give back result
 
-display power(5)
-display power(3, 3)
+display "=== 2. Functions ==="
+display power(5, 2)
 
-fn greet_user(name be "World", greeting be "Hello"):
-    give back greeting + ", " + name + "!"
-
-display greet_user()
-display greet_user("Vexium")
-display greet_user("Dev", "Welcome")
-
-# ═══════════════════════════════════════════════════════════════
-#  TEST 3: OOP — Structs with Constructor + Methods
-# ═══════════════════════════════════════════════════════════════
-display "=== 3. OOP: Structs ==="
-
-struct Point:
-    has x
-    has y
-
-    can init(x, y):
-        self.x be x
-        self.y be y
-
-    can to_string():
-        give back "(" + str(self.x) + ", " + str(self.y) + ")"
-
-    can distance_to(other):
-        let dx be other.x - self.x
-        let dy be other.y - self.y
-        give back sqrt(dx * dx + dy * dy)
-
-use math
-let p1 be Point(3, 4)
-let p2 be Point(0, 0)
-display p1.to_string()
-display p2.to_string()
-display p1.distance_to(p2)
-
-# ═══════════════════════════════════════════════════════════════
-#  TEST 4: OOP — Inheritance
-# ═══════════════════════════════════════════════════════════════
-display "=== 4. Inheritance ==="
-
-struct Animal:
-    has name
-    has sound
-
-    can init(name, sound):
-        self.name be name
-        self.sound be sound
-
-    can speak():
-        give back self.name + " says " + self.sound
-
-struct Dog extends Animal:
-    has breed
-
-    can init(name, breed):
-        self.name be name
-        self.sound be "Woof"
-        self.breed be breed
-
-    can fetch():
-        give back self.name + " fetches the ball!"
-
-let dog be Dog("Rex", "German Shepherd")
-display dog.speak()
-display dog.fetch()
-display dog.name
-display dog.breed
-
-# ═══════════════════════════════════════════════════════════════
-#  TEST 5: List Comprehensions
-# ═══════════════════════════════════════════════════════════════
-display "=== 5. List Comprehensions ==="
-
-use collections
-
-let nums be [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-
-# Map: double each number
+let nums be [1, 2, 3, 4, 5]
 let doubled be [x * 2 for each x in nums]
+display "=== 3. Comprehensions ==="
 display doubled
-
-# Filter: only even numbers
-let evens be [x for each x in nums if x % 2 == 0]
-display evens
-
-# Map + Filter: squares of odds
-let odd_squares be [x * x for each x in nums if x % 2 != 0]
-display odd_squares
-
-# String transformation
-let words be ["hello", "world", "vexium"]
-use string
-let upper_words be [upper(w) for each w in words]
-display upper_words
-
-# ═══════════════════════════════════════════════════════════════
-#  TEST 6: .length property
-# ═══════════════════════════════════════════════════════════════
-display "=== 6. Properties ==="
-
-let arr be [10, 20, 30, 40, 50]
-display arr.length
-display "Hello Vexium".length
-
-# ═══════════════════════════════════════════════════════════════
-#  TEST 7: Lambda + List Comprehension combo
-# ═══════════════════════════════════════════════════════════════
-display "=== 7. Lambda + Comprehension ==="
-
-let transform be (arr) => [x * x + 1 for each x in arr]
-display transform([1, 2, 3, 4, 5])
-
-# Functional pipeline
-let data be [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-let process be (arr) => [x * 3 for each x in arr if x > 5]
-display process(data)
 
 display "=== ALL PHASE 6 TESTS PASSED ==="

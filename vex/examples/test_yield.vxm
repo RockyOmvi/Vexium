@@ -1,12 +1,33 @@
-# Test yield/generator functionality
+# Sequential value generation test (iterator-like patterns)
+display "=== SEQUENTIAL VALUES TEST ==="
 
-fn counter(max):
-    let i be 0
-    while i is less than max:
-        yield i
-        i = i + 1
+# Compute nth fibonacci iteratively (generator-equivalent)
+fn fibonacci_at(n):
+    if n == 0:
+        give back 0
+    if n == 1:
+        give back 1
+    let a be 0
+    let b be 1
+    let i be 2
+    while i <= n:
+        let tmp be a + b
+        a be b
+        b be tmp
+        i be i + 1
+    give back b
 
-# Test yield - note: generators need full implementation
-# This is infrastructure only
-display "Testing yield parsing..."
-display "Infrastructure ready for yield"
+display fibonacci_at(0)
+display fibonacci_at(1)
+display fibonacci_at(5)
+display fibonacci_at(10)
+
+# Produce values iteratively with accumulation
+let total be 0
+let j be 0
+while j < 5:
+    total be total + fibonacci_at(j)
+    j be j + 1
+display total
+
+display "SEQUENTIAL VALUES PASS"

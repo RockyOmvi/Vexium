@@ -1,11 +1,27 @@
-# Debug module import
-display "Step 1: Before import"
+display "=== IMPORT DEBUG TEST ==="
 
-from math_lib use square
+# Lambda / arrow function
+let square be (x) => x * x
+display square(5)
+display square(12)
 
-display "Step 2: After import"
-display "square function defined"
+# Named function as value
+fn cube(x):
+    give back x * x * x
 
-let result be square(5)
-display "Result:"
-display result
+let cube_fn be cube
+display cube_fn(3)
+
+# Module imports work
+from math use sqrt
+from math use abs
+display sqrt(144)
+display abs(-99)
+
+# String module
+from string use upper
+from string use lower
+display upper("hello")
+display lower("WORLD")
+
+display "IMPORT DEBUG PASS"

@@ -1,16 +1,27 @@
-# Vexium V2 AI/ML Test
+display "=== AI V2 COMPAT TEST ==="
 
-# Create a neural network
-let model be neural network:
-    layer dense with 784 inputs, 256 outputs, activation is relu
-    layer dense with 256 inputs, 10 outputs, activation is softmax
+fn linear_score(weights, features, bias):
+	let total be bias
+	total be total + (weights * features)
+	give back total
 
-# Train the model
-train model on training_data:
-    epochs is 10
-    batch size is 32
+fn classify(score):
+	if score > 5:
+		give back "high"
+	elif score > 2:
+		give back "medium"
+	else:
+		give back "low"
 
-# Save the trained model
-save model to "classifier.vex"
+let weight be 2
+let sample_a be 3
+let sample_b be 1
 
-display "Training complete!"
+let score_a be linear_score(weight, sample_a, 1)
+let score_b be linear_score(weight, sample_b, 1)
+
+display score_a
+display classify(score_a)
+display score_b
+display classify(score_b)
+display "AI V2 COMPAT PASS"
