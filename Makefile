@@ -4,11 +4,12 @@ CFLAGS = -std=c99 -O2
 SRC_DIR = src
 SOURCES = $(SRC_DIR)/main.c $(SRC_DIR)/lexer.c $(SRC_DIR)/token.c $(SRC_DIR)/ast.c $(SRC_DIR)/parser.c $(SRC_DIR)/interpreter.c $(SRC_DIR)/stdlib.c
 TARGET = vexium.exe
+LIBS = -lm
 
 all: $(TARGET)
 
 $(TARGET): $(SOURCES)
-	$(CC) $(CFLAGS) -o $(TARGET) $(SOURCES)
+	$(CC) $(CFLAGS) -o $(TARGET) $(SOURCES) $(LIBS)
 
 debug: CFLAGS += -g -DDEBUG
 debug: $(TARGET)
