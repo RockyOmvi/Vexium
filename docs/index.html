@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Official Vexium Programming Language Documentation — Learn Vexium from basics to advanced OOP, standard library, and more.">
+    <title>Vexium Documentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #1c2333;
+            --bg-code: #0d1117;
+            --border-color: #30363d;
+            --border-active: #58a6ff;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --accent: #58a6ff;
+            --accent-glow: rgba(88, 166, 255, 0.15);
+            --green: #3fb950;
+            --orange: #d29922;
+            --red: #f85149;
+            --purple: #bc8cff;
+            --pink: #f778ba;
+            --cyan: #79c0ff;
+            --sidebar-width: 300px;
+            --header-height: 60px;
+            --code-font: 'JetBrains Mono', 'Consolas', monospace;
+            --body-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--border-color) var(--bg-primary); }
+
+        body {
+            font-family: var(--body-font);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            font-size: 15px;
+            overflow-x: hidden;
+        }
+
+        ::selection { background: var(--accent); color: #fff; }
+
+        /* ─── Header ─── */
+        .header {
+            position: fixed; top: 0; left: 0; right: 0;
+            height: var(--header-height);
+            background: rgba(13, 17, 23, 0.85);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            gap: 24px;
+        }
+
+        .header-logo {
+            display: flex; align-items: center; gap: 12px;
+            text-decoration: none; color: var(--text-primary);
+            font-weight: 700; font-size: 18px; letter-spacing: -0.5px;
+            flex-shrink: 0;
+        }
+
+        .header-logo .logo-icon {
+            width: 32px; height: 32px;
+            background: linear-gradient(135deg, var(--accent), var(--purple));
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 16px; color: #fff;
+        }
+
+        .header-version {
+            font-size: 11px; font-weight: 500;
+            background: var(--accent-glow);
+            color: var(--accent);
+            padding: 2px 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(88, 166, 255, 0.2);
+        }
+
+        .header-search {
+            flex: 1; max-width: 480px;
+            position: relative;
+        }
+
+        .header-search input {
+            width: 100%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 14px 8px 36px;
+            color: var(--text-primary);
+            font-family: var(--body-font);
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .header-search input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .header-search input::placeholder { color: var(--text-muted); }
+
+        .header-search .search-icon {
+            position: absolute; left: 12px; top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted); font-size: 14px;
+            pointer-events: none;
+        }
+
+        .header-nav {
+            display: flex; gap: 6px; margin-left: auto;
+        }
+
+        .header-nav a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 13px; font-weight: 500;
+            padding: 6px 12px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .header-nav a:hover {
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+        }
+
+        /* ─── Sidebar ─── */
+        .sidebar {
+            position: fixed;
+            top: var(--header-height);
+            left: 0;
+            bottom: 0;
+            width: var(--sidebar-width);
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            overflow-y: auto;
+            padding: 16px 0;
+            z-index: 900;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-color) transparent;
+        }
+
+        .sidebar-section {
+            margin-bottom: 4px;
+        }
+
+        .sidebar-section-title {
+            padding: 8px 20px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--text-muted);
+            user-select: none;
+        }
+
+        .sidebar-link {
+            display: block;
+            padding: 6px 20px 6px 28px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 13.5px;
+            font-weight: 400;
+            border-left: 3px solid transparent;
+            transition: all 0.15s;
+        }
+
+        .sidebar-link:hover {
+            color: var(--text-primary);
+            background: rgba(88, 166, 255, 0.05);
+        }
+
+        .sidebar-link.active {
+            color: var(--accent);
+            border-left-color: var(--accent);
+            background: var(--accent-glow);
+            font-weight: 500;
+        }
+
+        .sidebar-link.sub {
+            padding-left: 44px;
+            font-size: 12.5px;
+        }
+
+        /* ─── Main Content ─── */
+        .main {
+            margin-left: var(--sidebar-width);
+            margin-top: var(--header-height);
+            padding: 40px 48px 100px;
+            max-width: 960px;
+        }
+
+        .main h1 {
+            font-size: 32px; font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--text-primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .main h2 {
+            font-size: 24px; font-weight: 700;
+            margin-top: 56px; margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+            scroll-margin-top: 80px;
+        }
+
+        .main h3 {
+            font-size: 18px; font-weight: 600;
+            margin-top: 36px; margin-bottom: 12px;
+            color: var(--text-primary);
+            scroll-margin-top: 80px;
+        }
+
+        .main h4 {
+            font-size: 15px; font-weight: 600;
+            margin-top: 24px; margin-bottom: 8px;
+            color: var(--cyan);
+            scroll-margin-top: 80px;
+        }
+
+        .main p {
+            margin-bottom: 16px;
+            color: var(--text-secondary);
+        }
+
+        .main a { color: var(--accent); text-decoration: none; }
+        .main a:hover { text-decoration: underline; }
+
+        .main ul, .main ol {
+            margin-bottom: 16px;
+            padding-left: 24px;
+        }
+
+        .main li {
+            margin-bottom: 6px;
+            color: var(--text-secondary);
+        }
+
+        .main li code { font-size: 13px; }
+
+        .breadcrumb {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        .breadcrumb a { color: var(--text-muted); }
+        .breadcrumb a:hover { color: var(--accent); }
+        .breadcrumb .sep { margin: 0 6px; }
+
+        .section-description {
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+            line-height: 1.8;
+        }
+
+        /* ─── Code Blocks ─── */
+        pre {
+            background: var(--bg-code);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+            font-family: var(--code-font);
+            font-size: 13.5px;
+            line-height: 1.65;
+            position: relative;
+        }
+
+        pre .copy-btn {
+            position: absolute;
+            top: 8px; right: 8px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s, background 0.2s;
+        }
+
+        pre:hover .copy-btn { opacity: 1; }
+        pre .copy-btn:hover { background: var(--border-color); color: var(--text-primary); }
+
+        pre .lang-label {
+            position: absolute;
+            top: 8px; left: 16px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        pre.has-label { padding-top: 32px; }
+
+        code {
+            font-family: var(--code-font);
+            font-size: 13px;
+        }
+
+        :not(pre) > code {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-size: 12.5px;
+            color: var(--cyan);
+        }
+
+        /* ─── Syntax Highlighting ─── */
+        .kw { color: var(--pink); font-weight: 500; }
+        .str { color: #a5d6ff; }
+        .num { color: var(--cyan); }
+        .cmt { color: var(--text-muted); font-style: italic; }
+        .fn-name { color: #d2a8ff; }
+        .built { color: var(--green); }
+        .op { color: var(--red); }
+        .type-name { color: var(--orange); }
+        .self-ref { color: var(--pink); font-style: italic; }
+        .bool { color: var(--cyan); font-weight: 500; }
+        .ident { color: var(--text-primary); }
+
+        /* ─── Info Boxes ─── */
+        .info-box {
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid;
+            font-size: 14px;
+        }
+
+        .info-box.note {
+            background: rgba(88, 166, 255, 0.06);
+            border-color: var(--accent);
+        }
+
+        .info-box.tip {
+            background: rgba(63, 185, 80, 0.06);
+            border-color: var(--green);
+        }
+
+        .info-box.warning {
+            background: rgba(210, 153, 34, 0.06);
+            border-color: var(--orange);
+        }
+
+        .info-box.danger {
+            background: rgba(248, 81, 73, 0.06);
+            border-color: var(--red);
+        }
+
+        .info-box .info-title {
+            font-weight: 700;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .info-box.note .info-title { color: var(--accent); }
+        .info-box.tip .info-title { color: var(--green); }
+        .info-box.warning .info-title { color: var(--orange); }
+        .info-box.danger .info-title { color: var(--red); }
+
+        .info-box p { margin-bottom: 4px; color: var(--text-secondary); }
+
+        /* ─── Tables ─── */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 24px;
+            font-size: 14px;
+        }
+
+        th, td {
+            padding: 10px 14px;
+            text-align: left;
+            border: 1px solid var(--border-color);
+        }
+
+        th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+
+        td { color: var(--text-secondary); }
+        td code { font-size: 12.5px; }
+
+        tr:hover td { background: rgba(88, 166, 255, 0.03); }
+
+        /* ─── Hero Section ─── */
+        .hero {
+            padding: 48px 0 40px;
+            margin-bottom: 32px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .hero h1 {
+            font-size: 42px;
+            margin-bottom: 12px;
+        }
+
+        .hero .tagline {
+            font-size: 18px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            max-width: 640px;
+        }
+
+        .hero .badges {
+            display: flex;
+            gap: 8px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px; font-weight: 600;
+            border: 1px solid;
+        }
+
+        .badge.blue { color: var(--accent); border-color: rgba(88,166,255,0.3); background: rgba(88,166,255,0.08); }
+        .badge.green { color: var(--green); border-color: rgba(63,185,80,0.3); background: rgba(63,185,80,0.08); }
+        .badge.purple { color: var(--purple); border-color: rgba(188,140,255,0.3); background: rgba(188,140,255,0.08); }
+        .badge.orange { color: var(--orange); border-color: rgba(210,153,34,0.3); background: rgba(210,153,34,0.08); }
+
+        /* ─── Section anchors  ─── */
+        .section { scroll-margin-top: 80px; }
+
+        /* ─── Responsive ─── */
+        @media (max-width: 900px) {
+            .sidebar { display: none; }
+            .main { margin-left: 0; padding: 24px 20px 60px; }
+        }
+
+        /* ─── Separator ─── */
+        hr {
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 40px 0;
+        }
+
+        /* ─── Func signature ─── */
+        .func-sig {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-family: var(--code-font);
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .func-sig .fn-kw { color: var(--pink); font-weight: 600; }
+        .func-sig .fn-name { color: #d2a8ff; }
+        .func-sig .fn-param { color: var(--text-secondary); }
+        .func-sig .fn-type { color: var(--orange); }
+
+        .param-table { margin-top: 8px; }
+        .param-table td:first-child { font-family: var(--code-font); color: var(--cyan); font-size: 13px; min-width: 120px; }
+
+        /* ─── Mobile Menu Toggle ─── */
+        .menu-toggle {
+            display: none;
+            background: none; border: none; color: var(--text-primary);
+            font-size: 20px; cursor: pointer; padding: 4px;
+        }
+
+        @media (max-width: 900px) {
+            .menu-toggle { display: block; }
+            .sidebar.open { display: block; z-index: 950; width: 100%; }
+        }
+
+        /* ─── Footer ─── */
+        .footer {
+            margin-left: var(--sidebar-width);
+            padding: 32px 48px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        @media (max-width: 900px) {
+            .footer { margin-left: 0; padding: 24px 20px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<header class="header">
+    <button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰</button>
+    <a href="#" class="header-logo">
+        <span class="logo-icon">V</span>
+        Vexium Docs
+    </a>
+    <span class="header-version">v2.0</span>
+    <div class="header-search">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search documentation..." oninput="filterSidebar(this.value)">
+    </div>
+    <nav class="header-nav">
+        <a href="https://github.com/RockyOmvi/Vexium" target="_blank">GitHub</a>
+    </nav>
+</header>
+
+<!-- ═══════════════════ SIDEBAR ═══════════════════ -->
+<nav class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+        <div class="sidebar-section-title">Getting Started</div>
+        <a href="#welcome" class="sidebar-link active" data-section="welcome">Welcome</a>
+        <a href="#installation" class="sidebar-link" data-section="installation">Installation</a>
+        <a href="#hello-world" class="sidebar-link" data-section="hello-world">Hello, World!</a>
+        <a href="#running-programs" class="sidebar-link" data-section="running-programs">Running Programs</a>
+    </div>
+    <div class="sidebar-section">
+        <div class="sidebar-section-title">Language Basics</div>
+        <a href="#variables" class="sidebar-link" data-section="variables">Variables & Constants</a>
+        <a href="#data-types" class="sidebar-link" data-section="data-types">Data Types</a>
+        <a href="#operators" class="sidebar-link" data-section="operators">Operators</a>
+        <a href="#strings" class="sidebar-link" data-section="strings">Strings</a>
+        <a href="#display" class="sidebar-link" data-section="display">Display & Input</a>
+        <a href="#type-casting" class="sidebar-link" data-section="type-casting">Type Casting</a>
+    </div>
+    <div class="sidebar-section">
+        <div class="sidebar-section-title">Control Flow</div>
+        <a href="#if-elif-else" class="sidebar-link" data-section="if-elif-else">If / Elif / Else</a>
+        <a href="#while-loops" class="sidebar-link" data-section="while-loops">While Loops</a>
+        <a href="#for-loops" class="sidebar-link" data-section="for-loops">For Loops</a>
+        <a href="#repeat" class="sidebar-link" data-section="repeat">Repeat</a>
+        <a href="#match" class="sidebar-link" data-section="match">Match</a>
+        <a href="#break-skip" class="sidebar-link" data-section="break-skip">Break & Skip</a>
+    </div>
+    <div class="sidebar-section">
+        <div class="sidebar-section-title">Functions</div>
+        <a href="#functions" class="sidebar-link" data-section="functions">Defining Functions</a>
+        <a href="#return-values" class="sidebar-link" data-section="return-values">Return Values</a>
+        <a href="#recursion" class="sidebar-link" data-section="recursion">Recursion</a>
+    </div>
+    <div class="sidebar-section">
+        <div class="sidebar-section-title">Collections</div>
+        <a href="#arrays" class="sidebar-link" data-section="arrays">Arrays</a>
+        <a href="#maps" class="sidebar-link" data-section="maps">Maps (Dictionaries)</a>
+    </div>
+    <div class="sidebar-section">
+        <div class="sidebar-section-title">OOP</div>
+        <a href="#structs" class="sidebar-link" data-section="structs">Structs</a>
+        <a href="#methods" class="sidebar-link" data-section="methods">Methods</a>
+        <a href="#constructors" class="sidebar-link" data-section="constructors">Constructors</a>
+    </div>
+    <div class="sidebar-section">
+        <div class="sidebar-section-title">Modules</div>
+        <a href="#use-import" class="sidebar-link" data-section="use-import">use & from</a>
+        <a href="#module-math" class="sidebar-link" data-section="module-math">math</a>
+        <a href="#module-string" class="sidebar-link" data-section="module-string">string</a>
+        <a href="#module-file" class="sidebar-link" data-section="module-file">file</a>
+        <a href="#module-sys" class="sidebar-link" data-section="module-sys">sys</a>
+        <a href="#module-collections" class="sidebar-link" data-section="module-collections">collections</a>
+        <a href="#module-algo" class="sidebar-link" data-section="module-algo">algo</a>
+    </div>
+    <div class="sidebar-section">
+        <div class="sidebar-section-title">Advanced</div>
+        <a href="#error-handling" class="sidebar-link" data-section="error-handling">Error Handling</a>
+        <a href="#builtins" class="sidebar-link" data-section="builtins">Built-in Functions</a>
+        <a href="#compound-assign" class="sidebar-link" data-section="compound-assign">Compound Assignment</a>
+        <a href="#number-formats" class="sidebar-link" data-section="number-formats">Number Formats</a>
+    </div>
+</nav>
+
+<!-- ═══════════════════ MAIN CONTENT ═══════════════════ -->
+<main class="main">
+
+<!-- ── Welcome ── -->
+<section class="hero section" id="welcome">
+    <h1>Vexium Documentation</h1>
+    <p class="tagline">
+        The complete reference for the Vexium programming language — a human-readable, 
+        English-like compiled language that makes coding as natural as describing your ideas.
+    </p>
+    <div class="badges">
+        <span class="badge blue">English-like Syntax</span>
+        <span class="badge green">Compiled to Native</span>
+        <span class="badge purple">Cross-Platform</span>
+        <span class="badge orange">v2.0</span>
+    </div>
+</section>
+
+<div class="info-box tip">
+    <div class="info-title">Quick Glance</div>
+    <p>Vexium uses <code>let ... be</code> for variables, <code>fn</code> for functions, <code>struct</code> for objects, 
+    and English phrases like <code>is greater than</code> for comparisons. No semicolons, no curly braces for blocks — just clean, indented code.</p>
+</div>
+
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> name <span class="kw">be</span> <span class="str">"World"</span>
+<span class="kw">display</span> <span class="str">"Hello, {name}!"</span>
+
+<span class="kw">fn</span> <span class="fn-name">greet</span>(person):
+    <span class="kw">display</span> <span class="str">"Welcome, {person}!"</span>
+
+<span class="built">greet</span>(<span class="str">"Vexium Developer"</span>)</pre>
+
+<hr>
+
+<!-- ── Installation ── -->
+<section class="section" id="installation">
+<h2>Installation</h2>
+<p>Vexium compiles to a single native executable. Download the latest release for your platform from <a href="https://github.com/RockyOmvi/Vexium/releases" target="_blank">GitHub Releases</a>.</p>
+
+<h3>Pre-built Binaries</h3>
+<table>
+    <tr><th>Platform</th><th>Binary</th></tr>
+    <tr><td>Windows (x64)</td><td><code>vexium-windows-x64.exe</code></td></tr>
+    <tr><td>macOS (ARM64)</td><td><code>vexium-macos-arm64</code></td></tr>
+    <tr><td>Linux (x64)</td><td><code>vexium-linux-x64</code></td></tr>
+</table>
+
+<h3>Build from Source</h3>
+<p>Requires a C compiler (GCC, Clang, or MSVC).</p>
+<pre class="has-label"><span class="lang-label">bash</span><span class="cmt"># Clone the repository</span>
+git clone https://github.com/RockyOmvi/Vexium.git
+cd Vexium
+
+<span class="cmt"># Build with make</span>
+make
+
+<span class="cmt"># Or compile directly</span>
+gcc -O2 -o vexium src/*.c -lm</pre>
+</section>
+
+<hr>
+
+<!-- ── Hello World ── -->
+<section class="section" id="hello-world">
+<h2>Hello, World!</h2>
+<p>Create a file called <code>hello.vxm</code>:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">display</span> <span class="str">"Hello, World!"</span></pre>
+<p>Run it:</p>
+<pre class="has-label"><span class="lang-label">bash</span>vexium run hello.vxm</pre>
+<pre class="has-label"><span class="lang-label">output</span>Hello, World!</pre>
+</section>
+
+<hr>
+
+<!-- ── Running Programs ── -->
+<section class="section" id="running-programs">
+<h2>Running Programs</h2>
+<p>Vexium supports several CLI commands:</p>
+<table>
+    <tr><th>Command</th><th>Description</th></tr>
+    <tr><td><code>vexium run file.vxm</code></td><td>Execute a Vexium program</td></tr>
+    <tr><td><code>vexium lex file.vxm</code></td><td>Show lexer tokens (debug)</td></tr>
+    <tr><td><code>vexium ast file.vxm</code></td><td>Show AST tree (debug)</td></tr>
+</table>
+<p>Vexium source files use the <code>.vxm</code> extension by convention.</p>
+</section>
+
+<hr>
+
+<!-- ═══════════════════ LANGUAGE BASICS ═══════════════════ -->
+
+<!-- ── Variables ── -->
+<section class="section" id="variables">
+<h2>Variables & Constants</h2>
+<p>Variables are declared with <code>let ... be</code>. Constants use <code>const ... be</code> and cannot be reassigned.</p>
+
+<h3>Variables</h3>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> name <span class="kw">be</span> <span class="str">"Alice"</span>
+<span class="kw">let</span> age <span class="kw">be</span> <span class="num">25</span>
+<span class="kw">let</span> score <span class="kw">be</span> <span class="num">98.5</span>
+<span class="kw">let</span> active <span class="kw">be</span> <span class="bool">true</span>
+
+<span class="cmt"># Reassignment (no 'let' keyword)</span>
+age <span class="kw">be</span> <span class="num">26</span></pre>
+
+<h3>Constants</h3>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">const</span> PI <span class="kw">be</span> <span class="num">3.14159</span>
+<span class="kw">const</span> APP_NAME <span class="kw">be</span> <span class="str">"VexApp"</span>
+
+<span class="cmt"># PI be 3.0   ← This would throw an error!</span></pre>
+
+<div class="info-box note">
+    <div class="info-title">Note</div>
+    <p>Reassigning a constant produces a runtime error: <code>Cannot reassign constant 'PI'</code></p>
+</div>
+</section>
+
+<hr>
+
+<!-- ── Data Types ── -->
+<section class="section" id="data-types">
+<h2>Data Types</h2>
+<p>Vexium is dynamically typed. Every value has one of these types:</p>
+<table>
+    <tr><th>Type</th><th>Example</th><th>Description</th></tr>
+    <tr><td><code>int</code></td><td><code>42</code>, <code>-7</code>, <code>0xFF</code></td><td>64-bit signed integer</td></tr>
+    <tr><td><code>float</code></td><td><code>3.14</code>, <code>2.5e10</code></td><td>64-bit floating point</td></tr>
+    <tr><td><code>str</code></td><td><code>"hello"</code></td><td>Immutable string</td></tr>
+    <tr><td><code>bool</code></td><td><code>true</code>, <code>false</code></td><td>Boolean value</td></tr>
+    <tr><td><code>nothing</code></td><td><code>nothing</code></td><td>Null/None equivalent</td></tr>
+    <tr><td><code>array</code></td><td><code>[1, 2, 3]</code></td><td>Ordered list of values</td></tr>
+    <tr><td><code>map</code></td><td><code>{"key": "val"}</code></td><td>Key-value dictionary</td></tr>
+    <tr><td><code>fn</code></td><td><code>fn add(a, b): ...</code></td><td>Function value</td></tr>
+    <tr><td><code>struct</code></td><td><code>struct Dog: ...</code></td><td>Struct definition</td></tr>
+    <tr><td><code>instance</code></td><td><code>Dog("Rex", 3)</code></td><td>Struct instance</td></tr>
+</table>
+
+<h3>Truthiness</h3>
+<p>These values are <strong>falsy</strong> — everything else is truthy:</p>
+<ul>
+    <li><code>false</code></li>
+    <li><code>nothing</code></li>
+    <li><code>0</code> (int) and <code>0.0</code> (float)</li>
+    <li><code>""</code> (empty string)</li>
+    <li><code>[]</code> (empty array)</li>
+</ul>
+</section>
+
+<hr>
+
+<!-- ── Operators ── -->
+<section class="section" id="operators">
+<h2>Operators</h2>
+
+<h3>Arithmetic Operators</h3>
+<table>
+    <tr><th>Operator</th><th>Description</th><th>Example</th></tr>
+    <tr><td><code>+</code></td><td>Addition</td><td><code>10 + 3</code> → <code>13</code></td></tr>
+    <tr><td><code>-</code></td><td>Subtraction</td><td><code>10 - 3</code> → <code>7</code></td></tr>
+    <tr><td><code>*</code></td><td>Multiplication</td><td><code>10 * 3</code> → <code>30</code></td></tr>
+    <tr><td><code>/</code></td><td>Division</td><td><code>10 / 3</code> → <code>3</code></td></tr>
+    <tr><td><code>%</code></td><td>Modulo</td><td><code>10 % 3</code> → <code>1</code></td></tr>
+    <tr><td><code>**</code></td><td>Exponent</td><td><code>2 ** 10</code> → <code>1024</code></td></tr>
+</table>
+
+<h3>English Comparison Operators</h3>
+<p>Vexium uses readable English phrases for comparisons:</p>
+<table>
+    <tr><th>Vexium Syntax</th><th>Equivalent</th><th>Example</th></tr>
+    <tr><td><code>is</code></td><td><code>==</code></td><td><code>x is 5</code></td></tr>
+    <tr><td><code>is not</code></td><td><code>!=</code></td><td><code>x is not 0</code></td></tr>
+    <tr><td><code>is greater than</code></td><td><code>&gt;</code></td><td><code>x is greater than 10</code></td></tr>
+    <tr><td><code>is less than</code></td><td><code>&lt;</code></td><td><code>x is less than 10</code></td></tr>
+    <tr><td><code>is at least</code></td><td><code>&gt;=</code></td><td><code>x is at least 18</code></td></tr>
+    <tr><td><code>is at most</code></td><td><code>&lt;=</code></td><td><code>x is at most 100</code></td></tr>
+</table>
+
+<div class="info-box tip">
+    <div class="info-title">Tip</div>
+    <p>You can also use symbolic operators: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></p>
+</div>
+
+<h3>Logical Operators</h3>
+<table>
+    <tr><th>Operator</th><th>Description</th><th>Example</th></tr>
+    <tr><td><code>and</code></td><td>Logical AND</td><td><code>x is greater than 0 and x is less than 100</code></td></tr>
+    <tr><td><code>or</code></td><td>Logical OR</td><td><code>x is 0 or x is 1</code></td></tr>
+    <tr><td><code>not</code></td><td>Logical NOT</td><td><code>not active</code></td></tr>
+</table>
+
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> age <span class="kw">be</span> <span class="num">25</span>
+<span class="kw">let</span> has_id <span class="kw">be</span> <span class="bool">true</span>
+
+<span class="kw">if</span> age <span class="kw">is at least</span> <span class="num">18</span> <span class="kw">and</span> has_id:
+    <span class="kw">display</span> <span class="str">"Access granted"</span></pre>
+</section>
+
+<hr>
+
+<!-- ── Strings ── -->
+<section class="section" id="strings">
+<h2>Strings</h2>
+<p>Strings in Vexium support interpolation, concatenation, and repetition.</p>
+
+<h3>String Interpolation</h3>
+<p>Embed variables directly in strings using curly braces <code>{variable}</code>:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> name <span class="kw">be</span> <span class="str">"Vexium"</span>
+<span class="kw">let</span> version <span class="kw">be</span> <span class="num">2</span>
+
+<span class="kw">display</span> <span class="str">"Welcome to {name} v{version}!"</span>
+<span class="cmt"># Output: Welcome to Vexium v2!</span></pre>
+
+<p>You can also interpolate field accesses:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">display</span> <span class="str">"{dog.name} is {dog.age} years old"</span></pre>
+
+<h3>Concatenation & Repetition</h3>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> greeting <span class="kw">be</span> <span class="str">"Hello"</span> + <span class="str">" "</span> + <span class="str">"World"</span>
+<span class="kw">display</span> greeting     <span class="cmt"># Hello World</span>
+
+<span class="kw">display</span> <span class="str">"ha"</span> * <span class="num">3</span>     <span class="cmt"># hahaha</span></pre>
+
+<h3>String Indexing</h3>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> text <span class="kw">be</span> <span class="str">"Vexium"</span>
+<span class="kw">display</span> text[<span class="num">0</span>]      <span class="cmt"># V</span>
+<span class="kw">display</span> text[<span class="num">-1</span>]     <span class="cmt"># m</span>
+<span class="kw">display</span> <span class="built">len</span>(text)    <span class="cmt"># 6</span></pre>
+</section>
+
+<hr>
+
+<!-- ── Display & Input ── -->
+<section class="section" id="display">
+<h2>Display & Input</h2>
+
+<h3>display</h3>
+<p><code>display</code> is Vexium's built-in print statement. It outputs a value followed by a newline.</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">display</span> <span class="str">"Hello, World!"</span>
+<span class="kw">display</span> <span class="num">42</span>
+<span class="kw">display</span> [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]
+<span class="kw">display</span> <span class="bool">true</span>
+<span class="kw">display</span> <span class="bool">nothing</span></pre>
+
+<h3>input()</h3>
+<p><code>input()</code> reads a line of text from standard input. Pass an optional prompt string.</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> name <span class="kw">be</span> <span class="built">input</span>(<span class="str">"What is your name? "</span>)
+<span class="kw">display</span> <span class="str">"Hello, {name}!"</span>
+
+<span class="kw">let</span> age <span class="kw">be</span> <span class="built">int</span>(<span class="built">input</span>(<span class="str">"Enter your age: "</span>))
+<span class="kw">display</span> <span class="str">"You are {age} years old"</span></pre>
+</section>
+
+<hr>
+
+<!-- ── Type Casting ── -->
+<section class="section" id="type-casting">
+<h2>Type Casting</h2>
+<p>Convert between types using built-in cast functions:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">display</span> <span class="built">int</span>(<span class="str">"42"</span>)       <span class="cmt"># 42</span>
+<span class="kw">display</span> <span class="built">int</span>(<span class="num">3.14</span>)       <span class="cmt"># 3</span>
+<span class="kw">display</span> <span class="built">float</span>(<span class="num">10</span>)       <span class="cmt"># 10</span>
+<span class="kw">display</span> <span class="built">str</span>(<span class="num">3.14</span>)       <span class="cmt"># "3.14"</span>
+<span class="kw">display</span> <span class="built">type</span>(<span class="num">42</span>)        <span class="cmt"># int</span>
+<span class="kw">display</span> <span class="built">type</span>(<span class="str">"hello"</span>)   <span class="cmt"># str</span>
+<span class="kw">display</span> <span class="built">type</span>([<span class="num">1</span>,<span class="num">2</span>])     <span class="cmt"># array</span></pre>
+
+<table>
+    <tr><th>Function</th><th>Description</th></tr>
+    <tr><td><code>int(value)</code></td><td>Convert to integer (from string, float, or bool)</td></tr>
+    <tr><td><code>float(value)</code></td><td>Convert to float (from int or string)</td></tr>
+    <tr><td><code>str(value)</code></td><td>Convert any value to its string representation</td></tr>
+    <tr><td><code>type(value)</code></td><td>Returns the type name as a string</td></tr>
+</table>
+</section>
+
+<hr>
+
+<!-- ═══════════════════ CONTROL FLOW ═══════════════════ -->
+
+<!-- ── If / Elif / Else ── -->
+<section class="section" id="if-elif-else">
+<h2>If / Elif / Else</h2>
+<p>Conditional branching uses <code>if</code>, <code>elif</code>, and <code>else</code> followed by a colon. The body is indented.</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> score <span class="kw">be</span> <span class="num">85</span>
+
+<span class="kw">if</span> score <span class="kw">is greater than</span> <span class="num">90</span>:
+    <span class="kw">display</span> <span class="str">"Grade: A"</span>
+<span class="kw">elif</span> score <span class="kw">is greater than</span> <span class="num">80</span>:
+    <span class="kw">display</span> <span class="str">"Grade: B"</span>
+<span class="kw">elif</span> score <span class="kw">is greater than</span> <span class="num">70</span>:
+    <span class="kw">display</span> <span class="str">"Grade: C"</span>
+<span class="kw">else</span>:
+    <span class="kw">display</span> <span class="str">"Grade: F"</span></pre>
+</section>
+
+<hr>
+
+<!-- ── While Loops ── -->
+<section class="section" id="while-loops">
+<h2>While Loops</h2>
+<p>Execute a block repeatedly while a condition is true.</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> count <span class="kw">be</span> <span class="num">0</span>
+<span class="kw">while</span> count <span class="kw">is less than</span> <span class="num">5</span>:
+    <span class="kw">display</span> count
+    count <span class="kw">be</span> count + <span class="num">1</span></pre>
+<pre class="has-label"><span class="lang-label">output</span>0
+1
+2
+3
+4</pre>
+</section>
+
+<hr>
+
+<!-- ── For Loops ── -->
+<section class="section" id="for-loops">
+<h2>For Loops</h2>
+<p>Vexium supports two types of for loops: <strong>range-based</strong> and <strong>for-each</strong>.</p>
+
+<h3>For Range</h3>
+<p>Iterate over a numeric range with <code>for i in start to end</code>:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">for</span> i <span class="kw">in</span> <span class="num">1</span> <span class="kw">to</span> <span class="num">5</span>:
+    <span class="kw">display</span> i
+<span class="cmt"># Output: 1, 2, 3, 4</span></pre>
+
+<div class="info-box note">
+    <div class="info-title">Note</div>
+    <p>The end value is <strong>exclusive</strong> — <code>for i in 1 to 5</code> iterates 1, 2, 3, 4.</p>
+</div>
+
+<h4>With Step</h4>
+<p>Use <code>by</code> to specify a step size:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">for</span> i <span class="kw">in</span> <span class="num">0</span> <span class="kw">to</span> <span class="num">10</span> <span class="kw">by</span> <span class="num">2</span>:
+    <span class="kw">display</span> i
+<span class="cmt"># Output: 0, 2, 4, 6, 8</span></pre>
+
+<h3>For Each</h3>
+<p>Iterate over arrays and other iterables:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> fruits <span class="kw">be</span> [<span class="str">"apple"</span>, <span class="str">"banana"</span>, <span class="str">"cherry"</span>]
+
+<span class="kw">for each</span> fruit <span class="kw">in</span> fruits:
+    <span class="kw">display</span> fruit</pre>
+</section>
+
+<hr>
+
+<!-- ── Repeat ── -->
+<section class="section" id="repeat">
+<h2>Repeat</h2>
+<p>Execute a block a fixed number of times:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">repeat</span> <span class="num">3</span> <span class="kw">times</span>:
+    <span class="kw">display</span> <span class="str">"Vex!"</span></pre>
+<pre class="has-label"><span class="lang-label">output</span>Vex!
+Vex!
+Vex!</pre>
+</section>
+
+<hr>
+
+<!-- ── Match ── -->
+<section class="section" id="match">
+<h2>Match</h2>
+<p>Pattern matching with <code>match</code> and <code>=></code> arms:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> day <span class="kw">be</span> <span class="num">3</span>
+
+<span class="kw">match</span> day:
+    <span class="num">1</span> => <span class="kw">display</span> <span class="str">"Monday"</span>
+    <span class="num">2</span> => <span class="kw">display</span> <span class="str">"Tuesday"</span>
+    <span class="num">3</span> => <span class="kw">display</span> <span class="str">"Wednesday"</span>
+    <span class="num">4</span> => <span class="kw">display</span> <span class="str">"Thursday"</span>
+    <span class="num">5</span> => <span class="kw">display</span> <span class="str">"Friday"</span></pre>
+
+<p>Match works with strings too:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> command <span class="kw">be</span> <span class="str">"start"</span>
+
+<span class="kw">match</span> command:
+    <span class="str">"start"</span> => <span class="kw">display</span> <span class="str">"Starting..."</span>
+    <span class="str">"stop"</span>  => <span class="kw">display</span> <span class="str">"Stopping..."</span>
+    <span class="str">"help"</span>  => <span class="kw">display</span> <span class="str">"Showing help"</span></pre>
+</section>
+
+<hr>
+
+<!-- ── Break & Skip ── -->
+<section class="section" id="break-skip">
+<h2>Break & Skip</h2>
+<p>Use <code>break</code> to exit a loop early, and <code>skip</code> (Vexium's <code>continue</code>) to jump to the next iteration.</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">for</span> i <span class="kw">in</span> <span class="num">0</span> <span class="kw">to</span> <span class="num">10</span>:
+    <span class="kw">if</span> i <span class="kw">is</span> <span class="num">5</span>:
+        <span class="kw">break</span>
+    <span class="kw">display</span> i
+<span class="cmt"># Output: 0, 1, 2, 3, 4</span>
+
+<span class="kw">for</span> i <span class="kw">in</span> <span class="num">0</span> <span class="kw">to</span> <span class="num">5</span>:
+    <span class="kw">if</span> i <span class="kw">is</span> <span class="num">2</span>:
+        <span class="kw">skip</span>
+    <span class="kw">display</span> i
+<span class="cmt"># Output: 0, 1, 3, 4</span></pre>
+</section>
+
+<hr>
+
+<!-- ═══════════════════ FUNCTIONS ═══════════════════ -->
+
+<!-- ── Functions ── -->
+<section class="section" id="functions">
+<h2>Defining Functions</h2>
+<p>Functions are declared with the <code>fn</code> keyword:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">fn</span> <span class="fn-name">greet</span>(name):
+    <span class="kw">display</span> <span class="str">"Hello, {name}!"</span>
+
+<span class="fn-name">greet</span>(<span class="str">"Alice"</span>)
+<span class="fn-name">greet</span>(<span class="str">"Bob"</span>)</pre>
+
+<h3>Multiple Parameters</h3>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">fn</span> <span class="fn-name">add</span>(a, b):
+    <span class="kw">give back</span> a + b
+
+<span class="kw">let</span> result <span class="kw">be</span> <span class="fn-name">add</span>(<span class="num">10</span>, <span class="num">20</span>)
+<span class="kw">display</span> result   <span class="cmt"># 30</span></pre>
+
+<h3>Pass (Empty Body)</h3>
+<p>Use <code>pass</code> as a placeholder for an empty function body:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">fn</span> <span class="fn-name">todo</span>():
+    <span class="kw">pass</span></pre>
+</section>
+
+<hr>
+
+<!-- ── Return Values ── -->
+<section class="section" id="return-values">
+<h2>Return Values</h2>
+<p>Use <code>give back</code> to return a value from a function:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">fn</span> <span class="fn-name">square</span>(x):
+    <span class="kw">give back</span> x * x
+
+<span class="kw">fn</span> <span class="fn-name">max_of</span>(a, b):
+    <span class="kw">if</span> a <span class="kw">is greater than</span> b:
+        <span class="kw">give back</span> a
+    <span class="kw">give back</span> b
+
+<span class="kw">display</span> <span class="fn-name">square</span>(<span class="num">7</span>)          <span class="cmt"># 49</span>
+<span class="kw">display</span> <span class="fn-name">max_of</span>(<span class="num">10</span>, <span class="num">25</span>)    <span class="cmt"># 25</span></pre>
+
+<p>To return nothing explicitly:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">fn</span> <span class="fn-name">maybe_greet</span>(name):
+    <span class="kw">if</span> name <span class="kw">is</span> <span class="str">""</span>:
+        <span class="kw">give back</span> <span class="bool">nothing</span>
+    <span class="kw">display</span> <span class="str">"Hi, {name}!"</span></pre>
+</section>
+
+<hr>
+
+<!-- ── Recursion ── -->
+<section class="section" id="recursion">
+<h2>Recursion</h2>
+<p>Functions can call themselves recursively:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">fn</span> <span class="fn-name">factorial</span>(n):
+    <span class="kw">if</span> n <span class="kw">is at most</span> <span class="num">1</span>:
+        <span class="kw">give back</span> <span class="num">1</span>
+    <span class="kw">give back</span> n * <span class="fn-name">factorial</span>(n - <span class="num">1</span>)
+
+<span class="kw">display</span> <span class="fn-name">factorial</span>(<span class="num">5</span>)    <span class="cmt"># 120</span>
+<span class="kw">display</span> <span class="fn-name">factorial</span>(<span class="num">10</span>)   <span class="cmt"># 3628800</span></pre>
+
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">fn</span> <span class="fn-name">fib</span>(n):
+    <span class="kw">if</span> n <span class="kw">is at most</span> <span class="num">1</span>:
+        <span class="kw">give back</span> n
+    <span class="kw">give back</span> <span class="fn-name">fib</span>(n - <span class="num">1</span>) + <span class="fn-name">fib</span>(n - <span class="num">2</span>)
+
+<span class="kw">display</span> <span class="fn-name">fib</span>(<span class="num">10</span>)    <span class="cmt"># 55</span></pre>
+</section>
+
+<hr>
+
+<!-- ═══════════════════ COLLECTIONS ═══════════════════ -->
+
+<!-- ── Arrays ── -->
+<section class="section" id="arrays">
+<h2>Arrays</h2>
+<p>Arrays are ordered, mutable collections of any type.</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> numbers <span class="kw">be</span> [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>]
+<span class="kw">let</span> mixed <span class="kw">be</span> [<span class="num">42</span>, <span class="str">"hello"</span>, <span class="bool">true</span>, <span class="num">3.14</span>]
+<span class="kw">let</span> empty <span class="kw">be</span> []</pre>
+
+<h3>Indexing</h3>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> colors <span class="kw">be</span> [<span class="str">"red"</span>, <span class="str">"green"</span>, <span class="str">"blue"</span>]
+<span class="kw">display</span> colors[<span class="num">0</span>]     <span class="cmt"># red</span>
+<span class="kw">display</span> colors[<span class="num">-1</span>]    <span class="cmt"># blue (last element)</span>
+<span class="kw">display</span> <span class="built">len</span>(colors)   <span class="cmt"># 3</span></pre>
+
+<h3>Push & Pop</h3>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> items <span class="kw">be</span> [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]
+<span class="built">push</span>(items, <span class="num">4</span>)       <span class="cmt"># [1, 2, 3, 4]</span>
+<span class="kw">let</span> last <span class="kw">be</span> <span class="built">pop</span>(items) <span class="cmt"># 4, items is now [1, 2, 3]</span></pre>
+
+<h3>Nested Arrays</h3>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> matrix <span class="kw">be</span> [[<span class="num">1</span>, <span class="num">2</span>], [<span class="num">3</span>, <span class="num">4</span>], [<span class="num">5</span>, <span class="num">6</span>]]
+<span class="kw">display</span> matrix[<span class="num">0</span>][<span class="num">1</span>]  <span class="cmt"># 2</span>
+<span class="kw">display</span> matrix[<span class="num">2</span>][<span class="num">0</span>]  <span class="cmt"># 5</span></pre>
+</section>
+
+<hr>
+
+<!-- ── Maps ── -->
+<section class="section" id="maps">
+<h2>Maps (Dictionaries)</h2>
+<p>Maps store key-value pairs. Keys must be strings.</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> person <span class="kw">be</span> {<span class="str">"name"</span>: <span class="str">"Alice"</span>, <span class="str">"age"</span>: <span class="num">30</span>, <span class="str">"active"</span>: <span class="bool">true</span>}
+
+<span class="kw">display</span> person[<span class="str">"name"</span>]    <span class="cmt"># Alice</span>
+<span class="kw">display</span> person[<span class="str">"age"</span>]     <span class="cmt"># 30</span>
+<span class="kw">display</span> <span class="built">len</span>(person)       <span class="cmt"># 3</span></pre>
+
+<div class="info-box warning">
+    <div class="info-title">Warning</div>
+    <p>Map literals must be written on a single line. Multi-line map definitions may produce unexpected indentation tokens.</p>
+</div>
+</section>
+
+<hr>
+
+<!-- ═══════════════════ OOP ═══════════════════ -->
+
+<!-- ── Structs ── -->
+<section class="section" id="structs">
+<h2>Structs</h2>
+<p>Structs define custom data types with fields and methods — Vexium's object-oriented programming model.</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">struct</span> <span class="type-name">Dog</span>:
+    <span class="kw">has</span> name: <span class="type-name">str</span>
+    <span class="kw">has</span> age: <span class="type-name">int</span>
+
+    <span class="kw">can</span> <span class="fn-name">bark</span>(<span class="self-ref">self</span>):
+        <span class="kw">display</span> <span class="str">"{self.name} says: Woof!"</span>
+
+    <span class="kw">can</span> <span class="fn-name">info</span>(<span class="self-ref">self</span>):
+        <span class="kw">display</span> <span class="str">"{self.name} is {self.age} years old"</span></pre>
+
+<h3>Fields</h3>
+<p>Declare fields with <code>has fieldname: type</code>. The type annotation is informational — Vexium is dynamically typed.</p>
+<ul>
+    <li><code>has name: str</code> — a string field</li>
+    <li><code>has age: int</code> — an integer field</li>
+    <li><code>has score: float</code> — a float field</li>
+</ul>
+</section>
+
+<hr>
+
+<!-- ── Methods ── -->
+<section class="section" id="methods">
+<h2>Methods</h2>
+<p>Methods are defined inside a struct with <code>can method_name(self, ...)</code>. The first parameter must be <code>self</code> to access the instance.</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">struct</span> <span class="type-name">Counter</span>:
+    <span class="kw">has</span> value: <span class="type-name">int</span>
+
+    <span class="kw">can</span> <span class="fn-name">increment</span>(<span class="self-ref">self</span>):
+        <span class="self-ref">self</span>.value <span class="kw">be</span> <span class="self-ref">self</span>.value + <span class="num">1</span>
+
+    <span class="kw">can</span> <span class="fn-name">get_value</span>(<span class="self-ref">self</span>):
+        <span class="kw">give back</span> <span class="self-ref">self</span>.value
+
+    <span class="kw">can</span> <span class="fn-name">reset</span>(<span class="self-ref">self</span>):
+        <span class="self-ref">self</span>.value <span class="kw">be</span> <span class="num">0</span>
+
+<span class="kw">let</span> c <span class="kw">be</span> <span class="type-name">Counter</span>(<span class="num">0</span>)
+c.<span class="fn-name">increment</span>()
+c.<span class="fn-name">increment</span>()
+c.<span class="fn-name">increment</span>()
+<span class="kw">display</span> c.<span class="fn-name">get_value</span>()   <span class="cmt"># 3</span></pre>
+</section>
+
+<hr>
+
+<!-- ── Constructors ── -->
+<section class="section" id="constructors">
+<h2>Constructors</h2>
+<p>Structs are instantiated by calling the struct name as a function. Arguments are assigned to fields in declaration order.</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">struct</span> <span class="type-name">Point</span>:
+    <span class="kw">has</span> x: <span class="type-name">int</span>
+    <span class="kw">has</span> y: <span class="type-name">int</span>
+
+<span class="kw">let</span> p <span class="kw">be</span> <span class="type-name">Point</span>(<span class="num">10</span>, <span class="num">20</span>)
+<span class="kw">display</span> p.x    <span class="cmt"># 10</span>
+<span class="kw">display</span> p.y    <span class="cmt"># 20</span></pre>
+
+<h3>Complete OOP Example</h3>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">struct</span> <span class="type-name">BankAccount</span>:
+    <span class="kw">has</span> owner: <span class="type-name">str</span>
+    <span class="kw">has</span> balance: <span class="type-name">float</span>
+
+    <span class="kw">can</span> <span class="fn-name">deposit</span>(<span class="self-ref">self</span>, amount):
+        <span class="self-ref">self</span>.balance <span class="kw">be</span> <span class="self-ref">self</span>.balance + amount
+        <span class="kw">display</span> <span class="str">"Deposited {amount}. Balance: {self.balance}"</span>
+
+    <span class="kw">can</span> <span class="fn-name">withdraw</span>(<span class="self-ref">self</span>, amount):
+        <span class="kw">if</span> amount <span class="kw">is greater than</span> <span class="self-ref">self</span>.balance:
+            <span class="kw">display</span> <span class="str">"Insufficient funds!"</span>
+            <span class="kw">give back</span> <span class="bool">false</span>
+        <span class="self-ref">self</span>.balance <span class="kw">be</span> <span class="self-ref">self</span>.balance - amount
+        <span class="kw">display</span> <span class="str">"Withdrew {amount}. Balance: {self.balance}"</span>
+        <span class="kw">give back</span> <span class="bool">true</span>
+
+<span class="kw">let</span> account <span class="kw">be</span> <span class="type-name">BankAccount</span>(<span class="str">"Alice"</span>, <span class="num">1000.0</span>)
+account.<span class="fn-name">deposit</span>(<span class="num">500.0</span>)
+account.<span class="fn-name">withdraw</span>(<span class="num">200.0</span>)</pre>
+</section>
+
+<hr>
+
+<!-- ═══════════════════ MODULES ═══════════════════ -->
+
+<!-- ── use & from ── -->
+<section class="section" id="use-import">
+<h2>use & from</h2>
+<p>Import standard library modules with <code>use</code>. Import specific functions with <code>from ... use ...</code>.</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="cmt"># Import entire module</span>
+<span class="kw">use</span> math
+<span class="kw">display</span> <span class="built">sqrt</span>(<span class="num">144</span>)    <span class="cmt"># 12</span>
+
+<span class="cmt"># Import specific function</span>
+<span class="kw">from</span> math <span class="kw">use</span> PI
+<span class="kw">display</span> PI             <span class="cmt"># 3.14159...</span></pre>
+
+<h3>Available Modules</h3>
+<table>
+    <tr><th>Module</th><th>Description</th></tr>
+    <tr><td><code>math</code></td><td>Mathematical functions and constants</td></tr>
+    <tr><td><code>string</code></td><td>String manipulation utilities</td></tr>
+    <tr><td><code>file</code></td><td>File I/O operations</td></tr>
+    <tr><td><code>sys</code></td><td>System-level functions</td></tr>
+    <tr><td><code>collections</code></td><td>Advanced array operations</td></tr>
+    <tr><td><code>algo</code></td><td>Algorithm utilities</td></tr>
+</table>
+</section>
+
+<hr>
+
+<!-- ── math Module ── -->
+<section class="section" id="module-math">
+<h2>math Module</h2>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">use</span> math</pre>
+
+<h3>Constants</h3>
+<table>
+    <tr><th>Name</th><th>Value</th></tr>
+    <tr><td><code>PI</code></td><td>3.14159265358979...</td></tr>
+    <tr><td><code>E</code></td><td>2.71828182845904...</td></tr>
+    <tr><td><code>TAU</code></td><td>6.28318530717958...</td></tr>
+    <tr><td><code>INF</code></td><td>Positive infinity</td></tr>
+</table>
+
+<h3>Functions</h3>
+<table>
+    <tr><th>Function</th><th>Description</th><th>Example</th></tr>
+    <tr><td><code>sqrt(x)</code></td><td>Square root</td><td><code>sqrt(144)</code> → <code>12</code></td></tr>
+    <tr><td><code>abs(x)</code></td><td>Absolute value</td><td><code>abs(-5)</code> → <code>5</code></td></tr>
+    <tr><td><code>pow(base, exp)</code></td><td>Exponentiation</td><td><code>pow(2, 8)</code> → <code>256</code></td></tr>
+    <tr><td><code>sin(x)</code></td><td>Sine (radians)</td><td><code>sin(PI / 2)</code> → <code>1</code></td></tr>
+    <tr><td><code>cos(x)</code></td><td>Cosine (radians)</td><td><code>cos(0)</code> → <code>1</code></td></tr>
+    <tr><td><code>tan(x)</code></td><td>Tangent (radians)</td><td><code>tan(0)</code> → <code>0</code></td></tr>
+    <tr><td><code>floor(x)</code></td><td>Round down</td><td><code>floor(3.7)</code> → <code>3</code></td></tr>
+    <tr><td><code>ceil(x)</code></td><td>Round up</td><td><code>ceil(3.2)</code> → <code>4</code></td></tr>
+    <tr><td><code>round(x)</code></td><td>Round to nearest</td><td><code>round(3.5)</code> → <code>4</code></td></tr>
+    <tr><td><code>log(x)</code></td><td>Natural logarithm</td><td><code>log(E)</code> → <code>1</code></td></tr>
+    <tr><td><code>min(a, b)</code></td><td>Minimum value</td><td><code>min(3, 7)</code> → <code>3</code></td></tr>
+    <tr><td><code>max(a, b)</code></td><td>Maximum value</td><td><code>max(3, 7)</code> → <code>7</code></td></tr>
+    <tr><td><code>random()</code></td><td>Random float [0, 1)</td><td><code>random()</code> → <code>0.7341...</code></td></tr>
+    <tr><td><code>randint(min, max)</code></td><td>Random integer [min, max]</td><td><code>randint(1, 6)</code> → <code>4</code></td></tr>
+</table>
+</section>
+
+<hr>
+
+<!-- ── string Module ── -->
+<section class="section" id="module-string">
+<h2>string Module</h2>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">use</span> string</pre>
+<table>
+    <tr><th>Function</th><th>Description</th><th>Example</th></tr>
+    <tr><td><code>upper(s)</code></td><td>Convert to uppercase</td><td><code>upper("hello")</code> → <code>"HELLO"</code></td></tr>
+    <tr><td><code>lower(s)</code></td><td>Convert to lowercase</td><td><code>lower("HELLO")</code> → <code>"hello"</code></td></tr>
+    <tr><td><code>trim(s)</code></td><td>Strip leading/trailing whitespace</td><td><code>trim("  hi  ")</code> → <code>"hi"</code></td></tr>
+    <tr><td><code>contains(s, sub)</code></td><td>Check if substring exists</td><td><code>contains("hello", "ell")</code> → <code>true</code></td></tr>
+    <tr><td><code>starts_with(s, prefix)</code></td><td>Check string prefix</td><td><code>starts_with("hello", "he")</code> → <code>true</code></td></tr>
+    <tr><td><code>ends_with(s, suffix)</code></td><td>Check string suffix</td><td><code>ends_with("hello", "lo")</code> → <code>true</code></td></tr>
+    <tr><td><code>find(s, sub)</code></td><td>Find index of substring (-1 if not found)</td><td><code>find("hello", "ll")</code> → <code>2</code></td></tr>
+    <tr><td><code>replace(s, old, new)</code></td><td>Replace all occurrences</td><td><code>replace("aabb", "a", "x")</code> → <code>"xxbb"</code></td></tr>
+    <tr><td><code>split(s, delim)</code></td><td>Split into array</td><td><code>split("a,b,c", ",")</code> → <code>["a","b","c"]</code></td></tr>
+    <tr><td><code>join(sep, array)</code></td><td>Join array into string</td><td><code>join("-", ["a","b"])</code> → <code>"a-b"</code></td></tr>
+    <tr><td><code>reverse(s)</code></td><td>Reverse a string</td><td><code>reverse("abc")</code> → <code>"cba"</code></td></tr>
+    <tr><td><code>char_at(s, i)</code></td><td>Character at index</td><td><code>char_at("hello", 1)</code> → <code>"e"</code></td></tr>
+</table>
+</section>
+
+<hr>
+
+<!-- ── file Module ── -->
+<section class="section" id="module-file">
+<h2>file Module</h2>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">use</span> file</pre>
+<table>
+    <tr><th>Function</th><th>Description</th></tr>
+    <tr><td><code>read_file(path)</code></td><td>Read entire file as a string</td></tr>
+    <tr><td><code>write_file(path, content)</code></td><td>Write string to file (overwrites)</td></tr>
+    <tr><td><code>append_file(path, content)</code></td><td>Append string to file</td></tr>
+    <tr><td><code>file_exists(path)</code></td><td>Check if file exists (returns bool)</td></tr>
+</table>
+
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">use</span> file
+
+<span class="cmt"># Write to file</span>
+<span class="built">write_file</span>(<span class="str">"output.txt"</span>, <span class="str">"Hello from Vexium!"</span>)
+
+<span class="cmt"># Read from file</span>
+<span class="kw">let</span> content <span class="kw">be</span> <span class="built">read_file</span>(<span class="str">"output.txt"</span>)
+<span class="kw">display</span> content
+
+<span class="cmt"># Check existence</span>
+<span class="kw">if</span> <span class="built">file_exists</span>(<span class="str">"output.txt"</span>):
+    <span class="kw">display</span> <span class="str">"File found!"</span>
+
+<span class="cmt"># Append to file</span>
+<span class="built">append_file</span>(<span class="str">"log.txt"</span>, <span class="str">"Event logged."</span>)</pre>
+</section>
+
+<hr>
+
+<!-- ── sys Module ── -->
+<section class="section" id="module-sys">
+<h2>sys Module</h2>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">use</span> sys</pre>
+<table>
+    <tr><th>Function</th><th>Description</th></tr>
+    <tr><td><code>exit(code)</code></td><td>Exit the program with a status code</td></tr>
+    <tr><td><code>clock()</code></td><td>Returns CPU time in seconds (float)</td></tr>
+    <tr><td><code>time()</code></td><td>Returns Unix timestamp (int)</td></tr>
+    <tr><td><code>sleep(ms)</code></td><td>Pause execution for milliseconds</td></tr>
+    <tr><td><code>platform()</code></td><td>Returns OS name: <code>"windows"</code>, <code>"macos"</code>, or <code>"linux"</code></td></tr>
+</table>
+
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">use</span> sys
+
+<span class="kw">display</span> <span class="built">platform</span>()     <span class="cmt"># "windows"</span>
+<span class="kw">display</span> <span class="built">time</span>()         <span class="cmt"># 1784495000</span>
+
+<span class="kw">let</span> start <span class="kw">be</span> <span class="built">clock</span>()
+<span class="cmt"># ... some computation ...</span>
+<span class="kw">let</span> elapsed <span class="kw">be</span> <span class="built">clock</span>() - start
+<span class="kw">display</span> <span class="str">"Took {elapsed} seconds"</span></pre>
+</section>
+
+<hr>
+
+<!-- ── collections Module ── -->
+<section class="section" id="module-collections">
+<h2>collections Module</h2>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">use</span> collections</pre>
+<table>
+    <tr><th>Function</th><th>Description</th><th>Example</th></tr>
+    <tr><td><code>sort(arr)</code></td><td>Return sorted copy</td><td><code>sort([3,1,2])</code> → <code>[1,2,3]</code></td></tr>
+    <tr><td><code>slice(arr, start, end?)</code></td><td>Return sub-array</td><td><code>slice([1,2,3,4], 1, 3)</code> → <code>[2,3]</code></td></tr>
+    <tr><td><code>insert(arr, index, val)</code></td><td>Insert value at index</td><td><code>insert(arr, 0, "first")</code></td></tr>
+    <tr><td><code>remove(arr, index)</code></td><td>Remove and return element</td><td><code>remove(arr, 2)</code></td></tr>
+    <tr><td><code>index_of(arr, val)</code></td><td>Find index (-1 if not found)</td><td><code>index_of([10,20,30], 20)</code> → <code>1</code></td></tr>
+    <tr><td><code>count(arr, val)</code></td><td>Count occurrences</td><td><code>count([1,2,1,3], 1)</code> → <code>2</code></td></tr>
+    <tr><td><code>flatten(arr)</code></td><td>Flatten one level</td><td><code>flatten([[1,2],[3]])</code> → <code>[1,2,3]</code></td></tr>
+    <tr><td><code>zip(a, b)</code></td><td>Pair elements</td><td><code>zip([1,2], ["a","b"])</code> → <code>[[1,"a"],[2,"b"]]</code></td></tr>
+    <tr><td><code>enumerate(arr)</code></td><td>Add indices</td><td><code>enumerate(["a","b"])</code> → <code>[[0,"a"],[1,"b"]]</code></td></tr>
+    <tr><td><code>reversed(arr)</code></td><td>Return reversed copy</td><td><code>reversed([1,2,3])</code> → <code>[3,2,1]</code></td></tr>
+    <tr><td><code>unique(arr)</code></td><td>Remove duplicates</td><td><code>unique([1,2,2,3])</code> → <code>[1,2,3]</code></td></tr>
+    <tr><td><code>sum(arr)</code></td><td>Sum all elements</td><td><code>sum([1,2,3])</code> → <code>6</code></td></tr>
+    <tr><td><code>any(arr)</code></td><td>True if any truthy</td><td><code>any([0, false, 1])</code> → <code>true</code></td></tr>
+    <tr><td><code>all(arr)</code></td><td>True if all truthy</td><td><code>all([1, true, "x"])</code> → <code>true</code></td></tr>
+</table>
+</section>
+
+<hr>
+
+<!-- ── algo Module ── -->
+<section class="section" id="module-algo">
+<h2>algo Module</h2>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">use</span> algo</pre>
+<table>
+    <tr><th>Function</th><th>Description</th><th>Example</th></tr>
+    <tr><td><code>binary_search(arr, target)</code></td><td>Search sorted array (-1 if not found)</td><td><code>binary_search([1,3,5,7], 5)</code> → <code>2</code></td></tr>
+    <tr><td><code>shuffle(arr)</code></td><td>Return shuffled copy</td><td><code>shuffle([1,2,3,4])</code></td></tr>
+    <tr><td><code>gcd(a, b)</code></td><td>Greatest common divisor</td><td><code>gcd(12, 8)</code> → <code>4</code></td></tr>
+    <tr><td><code>lcm(a, b)</code></td><td>Least common multiple</td><td><code>lcm(4, 6)</code> → <code>12</code></td></tr>
+    <tr><td><code>is_prime(n)</code></td><td>Primality test</td><td><code>is_prime(17)</code> → <code>true</code></td></tr>
+    <tr><td><code>fibonacci(n)</code></td><td>Nth Fibonacci number</td><td><code>fibonacci(10)</code> → <code>55</code></td></tr>
+    <tr><td><code>clamp(val, min, max)</code></td><td>Clamp value to range</td><td><code>clamp(15, 0, 10)</code> → <code>10</code></td></tr>
+    <tr><td><code>lerp(a, b, t)</code></td><td>Linear interpolation</td><td><code>lerp(0, 100, 0.5)</code> → <code>50</code></td></tr>
+</table>
+
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">use</span> algo
+
+<span class="kw">display</span> <span class="built">gcd</span>(<span class="num">48</span>, <span class="num">18</span>)          <span class="cmt"># 6</span>
+<span class="kw">display</span> <span class="built">is_prime</span>(<span class="num">97</span>)        <span class="cmt"># true</span>
+<span class="kw">display</span> <span class="built">fibonacci</span>(<span class="num">20</span>)      <span class="cmt"># 6765</span>
+<span class="kw">display</span> <span class="built">clamp</span>(<span class="num">150</span>, <span class="num">0</span>, <span class="num">100</span>) <span class="cmt"># 100</span>
+<span class="kw">display</span> <span class="built">lerp</span>(<span class="num">0</span>, <span class="num">100</span>, <span class="num">0.75</span>) <span class="cmt"># 75</span></pre>
+</section>
+
+<hr>
+
+<!-- ═══════════════════ ADVANCED ═══════════════════ -->
+
+<!-- ── Error Handling ── -->
+<section class="section" id="error-handling">
+<h2>Error Handling</h2>
+<p>Use <code>attempt</code> / <code>otherwise</code> for error handling (Vexium's try/catch):</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">attempt</span>:
+    <span class="kw">display</span> <span class="str">"Trying something risky..."</span>
+    <span class="kw">let</span> result <span class="kw">be</span> <span class="num">10</span> / <span class="num">0</span>
+<span class="kw">otherwise</span> err:
+    <span class="kw">display</span> <span class="str">"Caught error: {err}"</span></pre>
+
+<div class="info-box note">
+    <div class="info-title">Note</div>
+    <p>The <code>err</code> variable after <code>otherwise</code> captures the error message as a string.</p>
+</div>
+</section>
+
+<hr>
+
+<!-- ── Built-in Functions ── -->
+<section class="section" id="builtins">
+<h2>Built-in Functions</h2>
+<p>These functions are always available without importing any module:</p>
+<table>
+    <tr><th>Function</th><th>Description</th><th>Example</th></tr>
+    <tr><td><code>len(value)</code></td><td>Length of string, array, or map</td><td><code>len("hello")</code> → <code>5</code></td></tr>
+    <tr><td><code>type(value)</code></td><td>Type name as string</td><td><code>type(42)</code> → <code>"int"</code></td></tr>
+    <tr><td><code>input(prompt?)</code></td><td>Read line from stdin</td><td><code>input("Name: ")</code></td></tr>
+    <tr><td><code>int(value)</code></td><td>Cast to integer</td><td><code>int("42")</code> → <code>42</code></td></tr>
+    <tr><td><code>float(value)</code></td><td>Cast to float</td><td><code>float(10)</code> → <code>10.0</code></td></tr>
+    <tr><td><code>str(value)</code></td><td>Cast to string</td><td><code>str(3.14)</code> → <code>"3.14"</code></td></tr>
+    <tr><td><code>push(arr, val)</code></td><td>Append to array</td><td><code>push(items, 4)</code></td></tr>
+    <tr><td><code>pop(arr)</code></td><td>Remove & return last element</td><td><code>pop(items)</code></td></tr>
+    <tr><td><code>range(end)</code></td><td>Array [0..end)</td><td><code>range(5)</code> → <code>[0,1,2,3,4]</code></td></tr>
+    <tr><td><code>range(start, end)</code></td><td>Array [start..end)</td><td><code>range(2, 5)</code> → <code>[2,3,4]</code></td></tr>
+    <tr><td><code>range(start, end, step)</code></td><td>Array with step</td><td><code>range(0, 10, 3)</code> → <code>[0,3,6,9]</code></td></tr>
+    <tr><td><code>display value</code></td><td>Print statement (not a function)</td><td><code>display "hi"</code></td></tr>
+</table>
+</section>
+
+<hr>
+
+<!-- ── Compound Assignment ── -->
+<section class="section" id="compound-assign">
+<h2>Compound Assignment</h2>
+<p>Shorthand operators for modifying variables in-place:</p>
+<table>
+    <tr><th>Operator</th><th>Equivalent</th><th>Example</th></tr>
+    <tr><td><code>+=</code></td><td><code>x be x + n</code></td><td><code>x += 5</code></td></tr>
+    <tr><td><code>-=</code></td><td><code>x be x - n</code></td><td><code>x -= 3</code></td></tr>
+    <tr><td><code>*=</code></td><td><code>x be x * n</code></td><td><code>x *= 2</code></td></tr>
+    <tr><td><code>/=</code></td><td><code>x be x / n</code></td><td><code>x /= 4</code></td></tr>
+</table>
+
+<pre class="has-label"><span class="lang-label">vex</span><span class="kw">let</span> score <span class="kw">be</span> <span class="num">100</span>
+score += <span class="num">50</span>     <span class="cmt"># 150</span>
+score -= <span class="num">20</span>     <span class="cmt"># 130</span>
+score *= <span class="num">2</span>      <span class="cmt"># 260</span>
+score /= <span class="num">4</span>      <span class="cmt"># 65</span>
+<span class="kw">display</span> score    <span class="cmt"># 65</span></pre>
+</section>
+
+<hr>
+
+<!-- ── Number Formats ── -->
+<section class="section" id="number-formats">
+<h2>Number Formats</h2>
+<p>Vexium supports decimal, hexadecimal, binary, and scientific notation:</p>
+<pre class="has-label"><span class="lang-label">vex</span><span class="cmt"># Decimal</span>
+<span class="kw">let</span> decimal <span class="kw">be</span> <span class="num">42</span>
+<span class="kw">let</span> negative <span class="kw">be</span> <span class="num">-17</span>
+
+<span class="cmt"># Hexadecimal (0x prefix)</span>
+<span class="kw">let</span> hex <span class="kw">be</span> <span class="num">0xFF</span>            <span class="cmt"># 255</span>
+
+<span class="cmt"># Binary (0b prefix)</span>
+<span class="kw">let</span> binary <span class="kw">be</span> <span class="num">0b1010</span>       <span class="cmt"># 10</span>
+
+<span class="cmt"># Underscores for readability</span>
+<span class="kw">let</span> big <span class="kw">be</span> <span class="num">1_000_000</span>       <span class="cmt"># 1000000</span>
+
+<span class="cmt"># Scientific notation</span>
+<span class="kw">let</span> sci <span class="kw">be</span> <span class="num">2.5e10</span>         <span class="cmt"># 25000000000</span>
+
+<span class="cmt"># Floating point</span>
+<span class="kw">let</span> pi <span class="kw">be</span> <span class="num">3.14159</span></pre>
+</section>
+
+</main>
+
+<!-- ═══════════════════ FOOTER ═══════════════════ -->
+<footer class="footer">
+    <p>Vexium Documentation v2.0 — Built with ❤️ by <a href="https://github.com/RockyOmvi" target="_blank" style="color: var(--accent);">RockyOmvi</a></p>
+</footer>
+
+<!-- ═══════════════════ SCRIPTS ═══════════════════ -->
+<script>
+// Sidebar active link tracking
+const sections = document.querySelectorAll('.section');
+const sidebarLinks = document.querySelectorAll('.sidebar-link');
+
+const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            sidebarLinks.forEach(link => link.classList.remove('active'));
+            const activeLink = document.querySelector(`.sidebar-link[data-section="${entry.target.id}"]`);
+            if (activeLink) activeLink.classList.add('active');
+        }
+    });
+}, { rootMargin: '-80px 0px -60% 0px', threshold: 0 });
+
+sections.forEach(section => observer.observe(section));
+
+// Sidebar search filter
+function filterSidebar(query) {
+    query = query.toLowerCase().trim();
+    const links = document.querySelectorAll('.sidebar-link');
+    const titles = document.querySelectorAll('.sidebar-section-title');
+    
+    if (!query) {
+        links.forEach(l => l.style.display = '');
+        titles.forEach(t => t.style.display = '');
+        return;
+    }
+
+    const sectionVisibility = new Map();
+
+    links.forEach(link => {
+        const text = link.textContent.toLowerCase();
+        const matches = text.includes(query);
+        link.style.display = matches ? '' : 'none';
+        
+        const section = link.closest('.sidebar-section');
+        if (section) {
+            if (matches) sectionVisibility.set(section, true);
+            else if (!sectionVisibility.has(section)) sectionVisibility.set(section, false);
+        }
+    });
+
+    titles.forEach(title => {
+        const section = title.closest('.sidebar-section');
+        title.style.display = sectionVisibility.get(section) ? '' : 'none';
+    });
+}
+
+// Copy buttons for code blocks
+document.querySelectorAll('pre').forEach(pre => {
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = 'Copy';
+    btn.onclick = () => {
+        const code = pre.textContent.replace('Copy', '').replace(pre.querySelector('.lang-label')?.textContent || '', '').trim();
+        navigator.clipboard.writeText(code).then(() => {
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = 'Copy', 1500);
+        });
+    };
+    pre.appendChild(btn);
+});
+
+// Keyboard shortcut for search
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        document.getElementById('searchInput').focus();
+    }
+});
+</script>
+
+</body>
+</html>
