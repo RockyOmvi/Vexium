@@ -4,10 +4,6 @@
 #include "common.h"
 #include "ast.h"
 
-/* ══════════════════════════════════════════════════════════════
- *  RUNTIME VALUE TYPES
- * ══════════════════════════════════════════════════════════════ */
-
 typedef enum {
     VAL_INT,
     VAL_FLOAT,
@@ -40,7 +36,6 @@ typedef struct {
     ASTNode* decl;
 } StructDef;
 
-/* ── The Runtime Value (must be defined BEFORE containers that embed it) ── */
 struct VexValue {
     ValueType type;
     union {
@@ -48,16 +43,15 @@ struct VexValue {
         double float_val;
         struct { char* data; int length; } string_val;
         bool bool_val;
-        ValueArray* array_val;      /* pointer — no circular dep */
-        ValueMap* map_val;          /* pointer — no circular dep */
+        ValueArray* array_val;
+        ValueMap* map_val;
         FnValue fn_val;
         StructDef struct_def;
-        InstanceValue* instance_val; /* pointer — no circular dep */
+        InstanceValue* instance_val;
         struct { BuiltinFn func; const char* name; } builtin_fn;
     } as;
 };
 
-/* ── Containers (use VexValue by value, so must come AFTER VexValue) ── */
 struct ValueArray {
     VexValue* items;
     int count;
@@ -82,10 +76,6 @@ struct InstanceValue {
     Environment* closure;
 };
 
-/* ══════════════════════════════════════════════════════════════
- *  ENVIRONMENT (Variable scope)
- * ══════════════════════════════════════════════════════════════ */
-
 typedef struct {
     char* name;
     VexValue value;
@@ -100,10 +90,6 @@ struct Environment {
     int ref_count;
 };
 
-/* ══════════════════════════════════════════════════════════════
- *  CONTROL FLOW SIGNALS
- * ══════════════════════════════════════════════════════════════ */
-
 typedef enum {
     SIGNAL_NONE,
     SIGNAL_BREAK,
@@ -116,19 +102,11 @@ typedef struct {
     VexValue return_value;
 } Signal;
 
-/* ══════════════════════════════════════════════════════════════
- *  INTERPRETER
- * ══════════════════════════════════════════════════════════════ */
-
 typedef struct {
     Environment* global_env;
     Signal signal;
     bool had_error;
 } Interpreter;
-
-/* ══════════════════════════════════════════════════════════════
- *  PUBLIC API
- * ══════════════════════════════════════════════════════════════ */
 
 VexValue vex_int(int64_t val);
 VexValue vex_float(double val);

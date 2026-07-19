@@ -4,12 +4,8 @@
 #include "common.h"
 #include "token.h"
 
-/* ══════════════════════════════════════════════════════════════
- *  AST NODE TYPES
- * ══════════════════════════════════════════════════════════════ */
-
 typedef enum {
-    /* ── Expressions ── */
+
     NODE_INT_LITERAL,
     NODE_FLOAT_LITERAL,
     NODE_STRING_LITERAL,
@@ -27,7 +23,6 @@ typedef enum {
     NODE_LAMBDA,
     NODE_LIST_COMP,
 
-    /* ── Statements ── */
     NODE_LET_DECL,
     NODE_CONST_DECL,
     NODE_EXPR_STMT,
@@ -50,10 +45,6 @@ typedef enum {
     NODE_BLOCK,
     NODE_PROGRAM
 } NodeType;
-
-/* ══════════════════════════════════════════════════════════════
- *  AST NODE STRUCTURE (tagged union)
- * ══════════════════════════════════════════════════════════════ */
 
 typedef struct ASTNode ASTNode;
 
@@ -103,7 +94,6 @@ typedef struct {
     ASTNode* value;
 } MapEntry;
 
-/* ── The AST Node ── */
 struct ASTNode {
     NodeType type;
     int line;
@@ -216,7 +206,6 @@ struct ASTNode {
             int method_capacity;
         } struct_decl;
 
-        /* (params) => expr — lambda */
         struct {
             ParamList params;
             ASTNode* body;
@@ -255,10 +244,6 @@ struct ASTNode {
     } as;
 };
 
-/* ══════════════════════════════════════════════════════════════
- *  AST API
- * ══════════════════════════════════════════════════════════════ */
-
 ASTNode* ast_new_node(NodeType type, int line, int column);
 
 void nodelist_init(NodeList* list);
@@ -271,7 +256,6 @@ void ast_print(ASTNode* node, int indent);
 
 void ast_free(ASTNode* node);
 
-/* Utility — duplicate a string */
 char* vex_strdup(const char* src, int length);
 
 #endif

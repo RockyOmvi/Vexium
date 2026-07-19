@@ -1,10 +1,6 @@
 #include "interpreter.h"
 #include "stdlib.h"
 
-/* ══════════════════════════════════════════════════════════════
- *  VALUE CONSTRUCTORS
- * ══════════════════════════════════════════════════════════════ */
-
 VexValue vex_int(int64_t val) {
     VexValue v; memset(&v, 0, sizeof(v));
     v.type = VAL_INT; v.as.int_val = val;
@@ -36,10 +32,6 @@ VexValue vex_nothing(void) {
     v.type = VAL_NOTHING;
     return v;
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  VALUE UTILITIES
- * ══════════════════════════════════════════════════════════════ */
 
 const char* vex_type_name(VexValue val) {
     switch (val.type) {
@@ -149,10 +141,6 @@ char* vex_value_to_string(VexValue val) {
     return vex_strdup(buf, (int)strlen(buf));
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  ENVIRONMENT
- * ══════════════════════════════════════════════════════════════ */
-
 Environment* env_new(Environment* parent) {
     Environment* env = (Environment*)calloc(1, sizeof(Environment));
     env->parent = parent;
@@ -174,7 +162,7 @@ void env_release(Environment* env) {
 }
 
 void env_define(Environment* env, const char* name, VexValue value, bool is_const) {
-    /* Check if already defined in THIS scope — overwrite */
+
     for (int i = 0; i < env->count; i++) {
         if (strcmp(env->entries[i].name, name) == 0) {
             env->entries[i].value = value;
@@ -231,10 +219,6 @@ void env_free(Environment* env) {
     if (env->parent) env_release(env->parent);
     free(env);
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  BUILT-IN FUNCTIONS
- * ══════════════════════════════════════════════════════════════ */
 
 static VexValue builtin_len(VexValue* args, int argc) {
     if (argc != 1) {
@@ -360,10 +344,6 @@ static VexValue builtin_range(VexValue* args, int argc) {
     return result;
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  STRING INTERPOLATION
- * ══════════════════════════════════════════════════════════════ */
-
 static char* interpolate_string(const char* src, int src_len, Environment* env) {
 
     int cap = src_len * 2 + 1;
@@ -446,15 +426,10 @@ static char* interpolate_string(const char* src, int src_len, Environment* env) 
     return result;
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  INTERPRETER CORE
- * ══════════════════════════════════════════════════════════════ */
-
 static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env);
 static VexValue eval_method_call(Interpreter* interp, InstanceValue* inst,
     const char* method_name, VexValue* args, int argc, Environment* env);
 
-/* ── Number coercion helpers ── */
 static double to_double(VexValue v) {
     if (v.type == VAL_INT) return (double)v.as.int_val;
     if (v.type == VAL_FLOAT) return v.as.float_val;
@@ -465,7 +440,6 @@ static bool is_numeric(VexValue v) {
     return v.type == VAL_INT || v.type == VAL_FLOAT;
 }
 
-/* ── Binary operation ── */
 static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env) {
     VexValue left = eval(interp, node->as.binary.left, env);
     VexValue right = eval(interp, node->as.binary.right, env);
@@ -579,11 +553,9 @@ static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env
     return vex_nothing();
 }
 
-/* ── Call function ── */
 static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) {
     int argc = node->as.call.args.count;
 
-    /* ── Intercept instance.method() calls ── */
     if (node->as.call.callee->type == NODE_FIELD_ACCESS) {
         ASTNode* fa = node->as.call.callee;
         VexValue obj = eval(interp, fa->as.field_access.object, env);
@@ -602,7 +574,7 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
             free(args);
             return result;
         }
-        /* Not an instance — fall through to normal field access + call */
+
     }
 
     VexValue callee = eval(interp, node->as.call.callee, env);
@@ -646,7 +618,7 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
         env_release(fn_env);
     }
     else if (callee.type == VAL_STRUCT_DEF) {
-        /* Struct constructor — create instance */
+
         InstanceValue* inst = (InstanceValue*)calloc(1, sizeof(InstanceValue));
         inst->struct_name = vex_strdup(callee.as.struct_def.name, (int)strlen(callee.as.struct_def.name));
         inst->decl = callee.as.struct_def.decl;
@@ -692,7 +664,6 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
     return result;
 }
 
-/* ── Method call on an instance ── */
 static VexValue eval_method_call(Interpreter* interp, InstanceValue* inst,
     const char* method_name, VexValue* args, int argc, Environment* env) {
 
@@ -708,7 +679,6 @@ static VexValue eval_method_call(Interpreter* interp, InstanceValue* inst,
                 self_val.as.instance_val = inst;
                 env_define(m_env, "self", self_val, false);
 
-                /* Bind parameters — skip "self" in param list */
                 int p = 0;
                 for (int j = 0; j < m->params.count; j++) {
                     if (strcmp(m->params.items[j].name, "self") == 0) continue;
@@ -748,16 +718,12 @@ static VexValue eval_method_call(Interpreter* interp, InstanceValue* inst,
     return vex_nothing();
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  MAIN EVAL — walks the AST
- * ══════════════════════════════════════════════════════════════ */
-
 static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
     if (node == NULL) return vex_nothing();
     if (interp->signal.type != SIGNAL_NONE) return vex_nothing();
 
     switch (node->type) {
-        /* ── Literals ── */
+
         case NODE_INT_LITERAL:
             return vex_int(node->as.int_literal.value);
         case NODE_FLOAT_LITERAL:
@@ -776,7 +742,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
         case NODE_NOTHING_LITERAL:
             return vex_nothing();
 
-        /* ── Identifier ── */
         case NODE_IDENTIFIER: {
             VexValue* val = env_get(env, node->as.identifier.name);
             if (val == NULL) {
@@ -788,11 +753,9 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return *val;
         }
 
-        /* ── Binary ── */
         case NODE_BINARY_OP:
             return eval_binary(interp, node, env);
 
-        /* ── Unary ── */
         case NODE_UNARY_OP: {
             VexValue operand = eval(interp, node->as.unary.operand, env);
             if (node->as.unary.op == TOKEN_NOT)
@@ -804,11 +767,9 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── Call ── */
         case NODE_CALL:
             return eval_call(interp, node, env);
 
-        /* ── Index ── */
         case NODE_INDEX: {
             VexValue obj = eval(interp, node->as.index_access.object, env);
             VexValue idx = eval(interp, node->as.index_access.index, env);
@@ -838,7 +799,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── Field access ── */
         case NODE_FIELD_ACCESS: {
             VexValue obj = eval(interp, node->as.field_access.object, env);
             const char* field = node->as.field_access.field;
@@ -848,7 +808,7 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
                     if (strcmp(obj.as.instance_val->fields.entries[i].key, field) == 0)
                         return obj.as.instance_val->fields.entries[i].value;
                 }
-                /* Could be a method call — return nothing for now, handled by call */
+
             }
             if (obj.type == VAL_MAP) {
                 for (int i = 0; i < obj.as.map_val->count; i++) {
@@ -866,7 +826,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── Array literal ── */
         case NODE_ARRAY_LITERAL: {
             VexValue result;
             result.type = VAL_ARRAY;
@@ -883,7 +842,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return result;
         }
 
-        /* ── Map literal ── */
         case NODE_MAP_LITERAL: {
             VexValue result;
             result.type = VAL_MAP;
@@ -904,7 +862,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return result;
         }
 
-        /* ── Assignment ── */
         case NODE_ASSIGN: {
             VexValue value = eval(interp, node->as.assign.value, env);
             TokenType op = node->as.assign.op;
@@ -960,7 +917,7 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
                             return value;
                         }
                     }
-                    /* Field doesn't exist — create it dynamically (Python-style) */
+
                     ValueMap* fmap = &obj.as.instance_val->fields;
                     if (fmap->count >= fmap->capacity) {
                         fmap->capacity = fmap->capacity == 0 ? 4 : fmap->capacity * 2;
@@ -1005,7 +962,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return value;
         }
 
-        /* ── Let / Const ── */
         case NODE_LET_DECL:
         case NODE_CONST_DECL: {
             VexValue value = eval(interp, node->as.var_decl.value, env);
@@ -1014,7 +970,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── Display ── */
         case NODE_DISPLAY: {
             VexValue value = eval(interp, node->as.display.value, env);
             vex_print_value(value);
@@ -1022,7 +977,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── If / elif / else ── */
         case NODE_IF: {
             VexValue cond = eval(interp, node->as.if_stmt.condition, env);
             if (vex_is_truthy(cond)) {
@@ -1033,7 +987,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── While ── */
         case NODE_WHILE: {
             while (!interp->had_error) {
                 VexValue cond = eval(interp, node->as.while_stmt.condition, env);
@@ -1052,7 +1005,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── For range ── */
         case NODE_FOR_RANGE: {
             VexValue start_val = eval(interp, node->as.for_range.start, env);
             VexValue end_val = eval(interp, node->as.for_range.end, env);
@@ -1081,7 +1033,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── For each ── */
         case NODE_FOR_EACH: {
             VexValue iterable = eval(interp, node->as.for_each.iterable, env);
             Environment* loop_env = env_new(env);
@@ -1115,7 +1066,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── Repeat N times ── */
         case NODE_REPEAT: {
             VexValue count_val = eval(interp, node->as.repeat.count, env);
             int64_t n = count_val.as.int_val;
@@ -1134,7 +1084,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── Function declaration ── */
         case NODE_FN_DECL: {
             VexValue fn;
             fn.type = VAL_FN;
@@ -1145,7 +1094,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── Give back (return) ── */
         case NODE_GIVE_BACK: {
             VexValue val = vex_nothing();
             if (node->as.give_back.value)
@@ -1155,7 +1103,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return val;
         }
 
-        /* ── Break / Skip ── */
         case NODE_BREAK:
             interp->signal.type = SIGNAL_BREAK;
             return vex_nothing();
@@ -1165,7 +1112,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
         case NODE_PASS:
             return vex_nothing();
 
-        /* ── Struct declaration ── */
         case NODE_STRUCT_DECL: {
             VexValue sd;
             sd.type = VAL_STRUCT_DEF;
@@ -1176,7 +1122,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             if (node->as.struct_decl.parent_name) {
                 VexValue* parent = env_get(env, node->as.struct_decl.parent_name);
                 if (parent && parent->type == VAL_STRUCT_DEF) {
-                    /* Parent fields are inherited — they'll be resolved at instance creation */
 
                 } else {
                     fprintf(stderr, "Error [line %d]: Parent struct '%s' not found\n",
@@ -1186,11 +1131,10 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── Lambda expression ── */
         case NODE_LAMBDA: {
             VexValue fn;
             fn.type = VAL_FN;
-            /* Reuse fn_val for lambda — create a synthetic fn decl node */
+
             ASTNode* synthetic = ast_new_node(NODE_FN_DECL, node->line, node->column);
             synthetic->as.fn_decl.name = vex_strdup("<lambda>", 8);
             synthetic->as.fn_decl.params = node->as.lambda.params;
@@ -1202,7 +1146,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return fn;
         }
 
-        /* ── List comprehension ── */
         case NODE_LIST_COMP: {
             VexValue iterable = eval(interp, node->as.list_comp.iterable, env);
             if (iterable.type != VAL_ARRAY) {
@@ -1238,7 +1181,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return result;
         }
 
-        /* ── Match ── */
         case NODE_MATCH: {
             VexValue expr = eval(interp, node->as.match_stmt.expr, env);
             for (int i = 0; i < node->as.match_stmt.arms.count; i++) {
@@ -1258,7 +1200,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── Use module ── */
         case NODE_USE: {
             if (!stdlib_load_module(node->as.use_stmt.module_name, env)) {
                 fprintf(stderr, "Error [line %d]: Unknown module '%s'\n",
@@ -1268,7 +1209,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── From module use symbol ── */
         case NODE_FROM_USE: {
             if (!stdlib_load_symbol(node->as.from_use.module_name,
                     node->as.from_use.import_name, env)) {
@@ -1277,7 +1217,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── Attempt / Otherwise ── */
         case NODE_ATTEMPT: {
 
             bool had_err_before = interp->had_error;
@@ -1295,7 +1234,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
         }
 
-        /* ── Block ── */
         case NODE_BLOCK: {
             Environment* block_env = env_new(env);
             VexValue last = vex_nothing();
@@ -1307,7 +1245,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return last;
         }
 
-        /* ── Program ── */
         case NODE_PROGRAM: {
             VexValue last = vex_nothing();
             for (int i = 0; i < node->as.program.statements.count; i++) {
@@ -1317,7 +1254,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return last;
         }
 
-        /* ── Expression statement ── */
         case NODE_EXPR_STMT:
             return eval(interp, node->as.expr_stmt.expr, env);
 
@@ -1327,10 +1263,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             return vex_nothing();
     }
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  INTERPRETER INIT / RUN
- * ══════════════════════════════════════════════════════════════ */
 
 void interpreter_init(Interpreter* interp) {
     interp->global_env = env_new(NULL);

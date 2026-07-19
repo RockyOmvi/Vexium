@@ -1,9 +1,5 @@
 #include "parser.h"
 
-/* ══════════════════════════════════════════════════════════════
- *  PARSER HELPERS
- * ══════════════════════════════════════════════════════════════ */
-
 static void advance_token(Parser* p) {
     p->previous = p->current;
     for (;;) {
@@ -48,33 +44,22 @@ static void expect_newline(Parser* p) {
     if (check(p, TOKEN_NEWLINE) || check(p, TOKEN_EOF)) {
         skip_newlines(p);
     }
-    /* Don't error — some constructs naturally consume the newline */
+
 }
 
-/* ── Extract text from token ── */
 static char* token_text(Token tok) {
     return vex_strdup(tok.start, tok.length);
 }
 
-/* ── Extract string content (strip quotes) ── */
 static char* token_string_content(Token tok) {
 
     return vex_strdup(tok.start + 1, tok.length - 2);
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  FORWARD DECLARATIONS
- * ══════════════════════════════════════════════════════════════ */
-
 static ASTNode* parse_expression(Parser* p);
 static ASTNode* parse_statement(Parser* p);
 static ASTNode* parse_block(Parser* p);
 
-/* ══════════════════════════════════════════════════════════════
- *  EXPRESSION PARSING (Pratt / precedence climbing)
- * ══════════════════════════════════════════════════════════════ */
-
-/* ── Primary expressions ── */
 static ASTNode* parse_primary(Parser* p) {
 
     if (match_token(p, TOKEN_INT)) {
@@ -170,7 +155,7 @@ static ASTNode* parse_primary(Parser* p) {
                 if (match_token(p, TOKEN_COLON)) {
                     if (!match_token(p, TOKEN_IDENTIFIER)) { valid = false; break; }
                 }
-                /* Optional: default value — skip be + expr heuristically */
+
                 if (match_token(p, TOKEN_BE)) {
                     parse_expression(p);
                 }
@@ -320,7 +305,6 @@ static ASTNode* parse_primary(Parser* p) {
     return ast_new_node(NODE_NOTHING_LITERAL, p->previous.line, p->previous.column);
 }
 
-/* ── Postfix: calls, indexing, field access ── */
 static ASTNode* parse_postfix(Parser* p) {
     ASTNode* expr = parse_primary(p);
 
@@ -361,7 +345,6 @@ static ASTNode* parse_postfix(Parser* p) {
     return expr;
 }
 
-/* ── Get operator precedence ── */
 static int get_precedence(TokenType type) {
     switch (type) {
         case TOKEN_OR:                                      return 1;
@@ -381,7 +364,6 @@ static int get_precedence(TokenType type) {
     }
 }
 
-/* ── Binary expression with precedence climbing ── */
 static ASTNode* parse_binary(Parser* p, int min_prec) {
     ASTNode* left = parse_postfix(p);
 
@@ -405,16 +387,10 @@ static ASTNode* parse_binary(Parser* p, int min_prec) {
     return left;
 }
 
-/* ── Top-level expression ── */
 static ASTNode* parse_expression(Parser* p) {
     return parse_binary(p, 0);
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  STATEMENT PARSING
- * ══════════════════════════════════════════════════════════════ */
-
-/* ── Parse indented block (INDENT ... DEDENT) ── */
 static ASTNode* parse_block(Parser* p) {
     skip_newlines(p);
     consume(p, TOKEN_INDENT, "Expected indented block");
@@ -433,7 +409,6 @@ static ASTNode* parse_block(Parser* p) {
     return block;
 }
 
-/* ── let x be 5 / let x: int be 5 ── */
 static ASTNode* parse_let_or_const(Parser* p, bool is_const) {
     Token kw = p->previous;
     Token name = consume(p, TOKEN_IDENTIFIER, "Expected variable name");
@@ -455,7 +430,6 @@ static ASTNode* parse_let_or_const(Parser* p, bool is_const) {
     return node;
 }
 
-/* ── display expr ── */
 static ASTNode* parse_display(Parser* p) {
     Token kw = p->previous;
     ASTNode* value = parse_expression(p);
@@ -464,7 +438,6 @@ static ASTNode* parse_display(Parser* p) {
     return node;
 }
 
-/* ── if/elif/else ── */
 static ASTNode* parse_if(Parser* p) {
     Token kw = p->previous;
     ASTNode* condition = parse_expression(p);
@@ -474,7 +447,7 @@ static ASTNode* parse_if(Parser* p) {
     ASTNode* else_block = NULL;
     skip_newlines(p);
     if (match_token(p, TOKEN_ELIF)) {
-        else_block = parse_if(p);  /* recursive — elif is just a nested if */
+        else_block = parse_if(p);
     } else if (match_token(p, TOKEN_ELSE)) {
         consume(p, TOKEN_COLON, "Expected ':' after else");
         else_block = parse_block(p);
@@ -487,7 +460,6 @@ static ASTNode* parse_if(Parser* p) {
     return node;
 }
 
-/* ── while condition: body ── */
 static ASTNode* parse_while(Parser* p) {
     Token kw = p->previous;
     ASTNode* condition = parse_expression(p);
@@ -500,7 +472,6 @@ static ASTNode* parse_while(Parser* p) {
     return node;
 }
 
-/* ── for i in start to end (by step): body  /  for each x in list: body ── */
 static ASTNode* parse_for(Parser* p) {
     Token kw = p->previous;
 
@@ -541,7 +512,6 @@ static ASTNode* parse_for(Parser* p) {
     return node;
 }
 
-/* ── repeat N times: body ── */
 static ASTNode* parse_repeat(Parser* p) {
     Token kw = p->previous;
     ASTNode* count = parse_expression(p);
@@ -555,7 +525,6 @@ static ASTNode* parse_repeat(Parser* p) {
     return node;
 }
 
-/* ── fn name(params) -> type: body ── */
 static ASTNode* parse_fn(Parser* p) {
     Token kw = p->previous;
     Token name = consume(p, TOKEN_IDENTIFIER, "Expected function name");
@@ -599,7 +568,6 @@ static ASTNode* parse_fn(Parser* p) {
     return node;
 }
 
-/* ── give back expr ── */
 static ASTNode* parse_give_back(Parser* p) {
     Token kw = p->previous;
     ASTNode* value = NULL;
@@ -611,7 +579,6 @@ static ASTNode* parse_give_back(Parser* p) {
     return node;
 }
 
-/* ── struct Name: has/can ── */
 static ASTNode* parse_struct(Parser* p) {
     Token kw = p->previous;
     Token name = consume(p, TOKEN_IDENTIFIER, "Expected struct name");
@@ -646,11 +613,10 @@ static ASTNode* parse_struct(Parser* p) {
             advance_token(p);
             skip_newlines(p);
             if (check(p, TOKEN_INDENT)) {
-                advance_token(p); /* consume INDENT — back in struct body */
+                advance_token(p);
                 skip_newlines(p);
                 continue;
             }
-            /* Real end of struct — restore and break */
 
             break;
         }
@@ -726,7 +692,7 @@ static ASTNode* parse_struct(Parser* p) {
             m->body = mbody;
         }
         else {
-            /* Unknown in struct — skip */
+
             advance_token(p);
         }
 
@@ -736,7 +702,6 @@ static ASTNode* parse_struct(Parser* p) {
     return node;
 }
 
-/* ── match expr: arms ── */
 static ASTNode* parse_match(Parser* p) {
     Token kw = p->previous;
     ASTNode* expr = parse_expression(p);
@@ -775,7 +740,6 @@ static ASTNode* parse_match(Parser* p) {
     return node;
 }
 
-/* ── use module ── */
 static ASTNode* parse_use(Parser* p) {
     Token kw = p->previous;
     Token mod = consume(p, TOKEN_IDENTIFIER, "Expected module name");
@@ -784,7 +748,6 @@ static ASTNode* parse_use(Parser* p) {
     return node;
 }
 
-/* ── from module use name ── */
 static ASTNode* parse_from_use(Parser* p) {
     Token kw = p->previous;
     Token mod = consume(p, TOKEN_IDENTIFIER, "Expected module name");
@@ -797,7 +760,6 @@ static ASTNode* parse_from_use(Parser* p) {
     return node;
 }
 
-/* ── attempt/otherwise ── */
 static ASTNode* parse_attempt(Parser* p) {
     Token kw = p->previous;
     consume(p, TOKEN_COLON, "Expected ':' after 'attempt'");
@@ -821,11 +783,6 @@ static ASTNode* parse_attempt(Parser* p) {
     return node;
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  ASSIGNMENT CHECK
- *  identifier be expr / identifier = expr / identifier += expr
- * ══════════════════════════════════════════════════════════════ */
-
 static ASTNode* parse_expression_or_assign(Parser* p) {
     ASTNode* expr = parse_expression(p);
 
@@ -846,10 +803,6 @@ static ASTNode* parse_expression_or_assign(Parser* p) {
 
     return expr;
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  MAIN STATEMENT DISPATCH
- * ══════════════════════════════════════════════════════════════ */
 
 static ASTNode* parse_statement(Parser* p) {
     skip_newlines(p);
@@ -900,10 +853,6 @@ static ASTNode* parse_statement(Parser* p) {
     stmt->as.expr_stmt.expr = expr;
     return stmt;
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  PUBLIC API
- * ══════════════════════════════════════════════════════════════ */
 
 void parser_init(Parser* parser, const char* source) {
     lexer_init(&parser->lexer, source);

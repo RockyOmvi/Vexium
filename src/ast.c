@@ -1,9 +1,5 @@
 #include "ast.h"
 
-/* ══════════════════════════════════════════════════════════════
- *  NODE CREATION
- * ══════════════════════════════════════════════════════════════ */
-
 ASTNode* ast_new_node(NodeType type, int line, int column) {
     ASTNode* node = (ASTNode*)calloc(1, sizeof(ASTNode));
     node->type = type;
@@ -11,10 +7,6 @@ ASTNode* ast_new_node(NodeType type, int line, int column) {
     node->column = column;
     return node;
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  NODELIST
- * ══════════════════════════════════════════════════════════════ */
 
 void nodelist_init(NodeList* list) {
     list->items = NULL;
@@ -30,10 +22,6 @@ void nodelist_add(NodeList* list, ASTNode* node) {
     }
     list->items[list->count++] = node;
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  PARAMLIST
- * ══════════════════════════════════════════════════════════════ */
 
 void paramlist_init(ParamList* list) {
     list->items = NULL;
@@ -52,10 +40,6 @@ void paramlist_add(ParamList* list, const char* name, const char* type_name) {
     p->type_name = type_name ? vex_strdup(type_name, (int)strlen(type_name)) : NULL;
     p->default_value = NULL;
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  AST PRINTING (debug)
- * ══════════════════════════════════════════════════════════════ */
 
 static void print_indent(int level) {
     for (int i = 0; i < level; i++) printf("  ");
@@ -385,10 +369,6 @@ void ast_print(ASTNode* node, int indent) {
             break;
     }
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  MEMORY MANAGEMENT
- * ══════════════════════════════════════════════════════════════ */
 
 void ast_free(ASTNode* node) {
     if (node == NULL) return;

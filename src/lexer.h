@@ -4,7 +4,6 @@
 #include "common.h"
 #include "token.h"
 
-/* ── Lexer State ── */
 typedef struct {
     const char* source;
     const char* start;
@@ -19,7 +18,6 @@ typedef struct {
     bool emit_newline;
 } Lexer;
 
-/* ── Public API ── */
 void lexer_init(Lexer* lexer, const char* source);
 Token lexer_next_token(Lexer* lexer);
 

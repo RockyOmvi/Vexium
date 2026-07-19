@@ -3,7 +3,6 @@
 
 #include "common.h"
 
-/* ── Token Types ── */
 typedef enum {
 
     TOKEN_INT,
@@ -106,7 +105,6 @@ typedef enum {
     TOKEN_ERROR
 } TokenType;
 
-/* ── Token Structure ── */
 typedef struct {
     TokenType type;
     const char* start;
@@ -115,7 +113,6 @@ typedef struct {
     int column;
 } Token;
 
-/* ── Token Utilities ── */
 const char* token_type_name(TokenType type);
 void token_print(Token token);
 

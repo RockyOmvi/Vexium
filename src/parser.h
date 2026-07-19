@@ -5,7 +5,6 @@
 #include "lexer.h"
 #include "ast.h"
 
-/* ── Parser State ── */
 typedef struct {
     Lexer lexer;
     Token current;
@@ -14,7 +13,6 @@ typedef struct {
     bool panic_mode;
 } Parser;
 
-/* ── Public API ── */
 void parser_init(Parser* parser, const char* source);
 ASTNode* parser_parse(Parser* parser);
 

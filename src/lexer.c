@@ -1,9 +1,5 @@
 #include "lexer.h"
 
-/* ══════════════════════════════════════════════════════════════
- *  HELPER FUNCTIONS
- * ══════════════════════════════════════════════════════════════ */
-
 static bool is_at_end(Lexer* lexer) {
     return *lexer->current == '\0';
 }
@@ -61,7 +57,6 @@ static Token synthetic_token(Lexer* lexer, TokenType type) {
     return token;
 }
 
-/* ── Skip whitespace (not newlines, not leading indent) ── */
 static void skip_whitespace_inline(Lexer* lexer) {
     for (;;) {
         char c = peek(lexer);
@@ -73,16 +68,11 @@ static void skip_whitespace_inline(Lexer* lexer) {
     }
 }
 
-/* ── Skip # comments ── */
 static void skip_comment(Lexer* lexer) {
     while (peek(lexer) != '\n' && !is_at_end(lexer)) {
         advance(lexer);
     }
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  KEYWORD TABLE
- * ══════════════════════════════════════════════════════════════ */
 
 typedef struct {
     const char* name;
@@ -143,11 +133,6 @@ static TokenType check_keyword(const char* start, int length) {
     return TOKEN_IDENTIFIER;
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  SCAN SPECIFIC TOKEN TYPES
- * ══════════════════════════════════════════════════════════════ */
-
-/* ── Scan a string literal ("..." or '...') ── */
 static Token scan_string(Lexer* lexer, char quote) {
     while (peek(lexer) != quote && !is_at_end(lexer)) {
         if (peek(lexer) == '\n') {
@@ -166,7 +151,6 @@ static Token scan_string(Lexer* lexer, char quote) {
     return make_token(lexer, TOKEN_STRING);
 }
 
-/* ── Scan a number literal ── */
 static Token scan_number(Lexer* lexer) {
     bool is_float = false;
 
@@ -200,7 +184,6 @@ static Token scan_number(Lexer* lexer) {
     return make_token(lexer, is_float ? TOKEN_FLOAT : TOKEN_INT);
 }
 
-/* ── Scan identifier or keyword ── */
 static Token scan_identifier(Lexer* lexer) {
     while (isalnum(peek(lexer)) || peek(lexer) == '_') {
         advance(lexer);
@@ -208,8 +191,6 @@ static Token scan_identifier(Lexer* lexer) {
 
     int length = (int)(lexer->current - lexer->start);
     TokenType type = check_keyword(lexer->start, length);
-
-    /* ── Handle multi-word keywords ── */
 
     /* "give back" → TOKEN_GIVE_BACK */
     if (type == TOKEN_IDENTIFIER && length == 4 && memcmp(lexer->start, "give", 4) == 0) {
@@ -223,14 +204,11 @@ static Token scan_identifier(Lexer* lexer) {
             lexer->column += 4;
             return make_token(lexer, TOKEN_GIVE_BACK);
         }
-        /* not "give back" — backtrack */
+
         lexer->current = saved;
         lexer->column = saved_col;
     }
 
-    /* Handle "is" compound operators:
-       "is not", "is greater than", "is less than",
-       "is at least", "is at most" */
     if (type == TOKEN_IS) {
         const char* saved = lexer->current;
         int saved_col = lexer->column;
@@ -295,7 +273,6 @@ static Token scan_identifier(Lexer* lexer) {
             lexer->column = saved_col;
         }
 
-        /* plain "is" — backtrack */
         lexer->current = saved;
         lexer->column = saved_col;
     }
@@ -317,10 +294,6 @@ static Token scan_identifier(Lexer* lexer) {
     return make_token(lexer, type);
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  INDENTATION HANDLING
- * ══════════════════════════════════════════════════════════════ */
-
 static int count_indent(Lexer* lexer) {
     int spaces = 0;
     const char* p = lexer->current;
@@ -334,10 +307,6 @@ static int count_indent(Lexer* lexer) {
     }
     return spaces;
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  MAIN LEXER ENTRY POINTS
- * ══════════════════════════════════════════════════════════════ */
 
 void lexer_init(Lexer* lexer, const char* source) {
     lexer->source = source;
@@ -353,19 +322,17 @@ void lexer_init(Lexer* lexer, const char* source) {
 }
 
 Token lexer_next_token(Lexer* lexer) {
-    /* ── Emit pending DEDENTs first ── */
+
     if (lexer->pending_dedents > 0) {
         lexer->pending_dedents--;
         return synthetic_token(lexer, TOKEN_DEDENT);
     }
 
-    /* ── Emit pending NEWLINE ── */
     if (lexer->emit_newline) {
         lexer->emit_newline = false;
         return synthetic_token(lexer, TOKEN_NEWLINE);
     }
 
-    /* ── Handle indentation at start of line ── */
     if (lexer->at_line_start) {
         lexer->at_line_start = false;
 
@@ -377,7 +344,6 @@ Token lexer_next_token(Lexer* lexer) {
                 advance(lexer);
             }
 
-            /* Blank line or comment-only line — skip entirely */
             if (peek(lexer) == '\n') {
                 advance(lexer);
                 lexer->line++;
@@ -396,7 +362,6 @@ Token lexer_next_token(Lexer* lexer) {
                 continue;
             }
 
-            /* Real content — process indentation */
             int current_indent = lexer->indent_stack[lexer->indent_depth];
 
             if (indent > current_indent) {
@@ -428,17 +393,14 @@ Token lexer_next_token(Lexer* lexer) {
         }
     }
 
-    /* ── Skip inline whitespace ── */
     skip_whitespace_inline(lexer);
 
-    /* ── Skip comments ── */
     if (peek(lexer) == '#') {
         skip_comment(lexer);
     }
 
     lexer->start = lexer->current;
 
-    /* ── Check for EOF ── */
     if (is_at_end(lexer)) {
 
         if (lexer->indent_depth > 0) {
@@ -452,7 +414,6 @@ Token lexer_next_token(Lexer* lexer) {
 
     char c = advance(lexer);
 
-    /* ── Newlines ── */
     if (c == '\n') {
         lexer->line++;
         lexer->column = 1;
@@ -460,22 +421,18 @@ Token lexer_next_token(Lexer* lexer) {
         return make_token(lexer, TOKEN_NEWLINE);
     }
 
-    /* ── Numbers ── */
     if (isdigit(c)) {
         return scan_number(lexer);
     }
 
-    /* ── Identifiers and Keywords ── */
     if (isalpha(c) || c == '_') {
         return scan_identifier(lexer);
     }
 
-    /* ── Strings ── */
     if (c == '"' || c == '\'') {
         return scan_string(lexer, c);
     }
 
-    /* ── Two-character operators ── */
     switch (c) {
         case '+':
             if (match(lexer, '=')) return make_token(lexer, TOKEN_PLUS_ASSIGN);

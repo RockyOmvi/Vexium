@@ -11,13 +11,6 @@
 #include <math.h>
 #include <time.h>
 
-/* ══════════════════════════════════════════════════════════════
- *  MATH MODULE
- *
- *  sqrt, abs, pow, sin, cos, tan, floor, ceil, round, log
- *  min, max, random, PI, E
- * ══════════════════════════════════════════════════════════════ */
-
 static VexValue math_sqrt(VexValue* args, int argc) {
     if (argc != 1) { fprintf(stderr, "Error: sqrt() expects 1 argument\n"); return vex_nothing(); }
     return vex_float(sqrt(args[0].type == VAL_INT ? (double)args[0].as.int_val : args[0].as.float_val));
@@ -109,13 +102,6 @@ static VexValue math_randint(VexValue* args, int argc) {
     int64_t hi = args[1].as.int_val;
     return vex_int(lo + rand() % (hi - lo + 1));
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  STRING MODULE
- *
- *  upper, lower, trim, split, join, replace, contains,
- *  starts_with, ends_with, find, slice, reverse, char_at
- * ══════════════════════════════════════════════════════════════ */
 
 static VexValue str_upper(VexValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_STRING) {
@@ -332,12 +318,6 @@ static VexValue str_char_at(VexValue* args, int argc) {
     return vex_string(&args[0].as.string_val.data[idx], 1);
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  FILE MODULE
- *
- *  read_file, write_file, append_file, file_exists
- * ══════════════════════════════════════════════════════════════ */
-
 static VexValue file_read(VexValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_STRING) {
         fprintf(stderr, "Error: read_file() expects 1 string argument\n"); return vex_nothing();
@@ -396,12 +376,6 @@ static VexValue file_exists(VexValue* args, int argc) {
     return vex_bool(false);
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  SYS MODULE
- *
- *  exit, clock, sleep, args, time
- * ══════════════════════════════════════════════════════════════ */
-
 static VexValue sys_exit(VexValue* args, int argc) {
     int code = (argc >= 1 && args[0].type == VAL_INT) ? (int)args[0].as.int_val : 0;
     exit(code);
@@ -445,18 +419,6 @@ static VexValue sys_platform(VexValue* args, int argc) {
     #endif
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  COLLECTIONS MODULE — Enhanced Dynamic Arrays & Data Structures
- *
- *  Overcomes: Python's lack of built-in sorted-insert, no native
- *  slice-and-dice, verbose list comprehensions, no built-in
- *  flatten/zip. Rust/C++ require iterators boilerplate.
- *
- *  sort, slice, insert, remove, index_of, count, flatten, zip,
- *  enumerate, map_array, filter_array, reduce, any, all,
- *  reversed_array, unique
- * ══════════════════════════════════════════════════════════════ */
-
 static int vex_compare(const void* a, const void* b) {
     const VexValue* va = (const VexValue*)a;
     const VexValue* vb = (const VexValue*)b;
@@ -480,7 +442,6 @@ static void arr_push(ValueArray* arr, VexValue val) {
     arr->items[arr->count++] = val;
 }
 
-/* sort(array) — returns new sorted array */
 static VexValue coll_sort(VexValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: sort() expects 1 array argument\n"); return vex_nothing();
@@ -497,7 +458,6 @@ static VexValue coll_sort(VexValue* args, int argc) {
     return result;
 }
 
-/* slice(array, start, end) — returns sub-array [start:end) */
 static VexValue coll_slice(VexValue* args, int argc) {
     if (argc < 2 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: slice() expects (array, start[, end])\n"); return vex_nothing();
@@ -517,7 +477,6 @@ static VexValue coll_slice(VexValue* args, int argc) {
     return result;
 }
 
-/* insert(array, index, value) — inserts at position (mutates) */
 static VexValue coll_insert(VexValue* args, int argc) {
     if (argc != 3 || args[0].type != VAL_ARRAY || args[1].type != VAL_INT) {
         fprintf(stderr, "Error: insert() expects (array, index, value)\n"); return vex_nothing();
@@ -534,7 +493,6 @@ static VexValue coll_insert(VexValue* args, int argc) {
     return vex_nothing();
 }
 
-/* remove(array, index) — removes at index, returns removed value */
 static VexValue coll_remove(VexValue* args, int argc) {
     if (argc != 2 || args[0].type != VAL_ARRAY || args[1].type != VAL_INT) {
         fprintf(stderr, "Error: remove() expects (array, index)\n"); return vex_nothing();
@@ -549,7 +507,6 @@ static VexValue coll_remove(VexValue* args, int argc) {
     return removed;
 }
 
-/* index_of(array, value) — returns first index or -1 */
 static VexValue coll_index_of(VexValue* args, int argc) {
     if (argc != 2 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: index_of() expects (array, value)\n"); return vex_nothing();
@@ -566,7 +523,6 @@ static VexValue coll_index_of(VexValue* args, int argc) {
     return vex_int(-1);
 }
 
-/* count(array, value) — count occurrences */
 static VexValue coll_count(VexValue* args, int argc) {
     if (argc != 2 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: count() expects (array, value)\n"); return vex_nothing();
@@ -582,7 +538,6 @@ static VexValue coll_count(VexValue* args, int argc) {
     return vex_int(c);
 }
 
-/* flatten(array) — flatten nested arrays one level */
 static VexValue coll_flatten(VexValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: flatten() expects 1 array argument\n"); return vex_nothing();
@@ -602,7 +557,6 @@ static VexValue coll_flatten(VexValue* args, int argc) {
     return result;
 }
 
-/* zip(arr1, arr2) — returns array of [a, b] pairs */
 static VexValue coll_zip(VexValue* args, int argc) {
     if (argc != 2 || args[0].type != VAL_ARRAY || args[1].type != VAL_ARRAY) {
         fprintf(stderr, "Error: zip() expects 2 array arguments\n"); return vex_nothing();
@@ -624,7 +578,6 @@ static VexValue coll_zip(VexValue* args, int argc) {
     return result;
 }
 
-/* enumerate(array) — returns [[0, item0], [1, item1], ...] */
 static VexValue coll_enumerate(VexValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: enumerate() expects 1 array argument\n"); return vex_nothing();
@@ -644,7 +597,6 @@ static VexValue coll_enumerate(VexValue* args, int argc) {
     return result;
 }
 
-/* reversed(array) — returns new reversed array */
 static VexValue coll_reversed(VexValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: reversed() expects 1 array argument\n"); return vex_nothing();
@@ -657,7 +609,6 @@ static VexValue coll_reversed(VexValue* args, int argc) {
     return result;
 }
 
-/* unique(array) — returns array with duplicates removed */
 static VexValue coll_unique(VexValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: unique() expects 1 array argument\n"); return vex_nothing();
@@ -680,7 +631,6 @@ static VexValue coll_unique(VexValue* args, int argc) {
     return result;
 }
 
-/* sum(array) — sum all numeric elements */
 static VexValue coll_sum(VexValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: sum() expects 1 array argument\n"); return vex_nothing();
@@ -696,7 +646,6 @@ static VexValue coll_sum(VexValue* args, int argc) {
     return has_float ? vex_float(total_f) : vex_int(total_i);
 }
 
-/* any(array) — returns true if any element is truthy */
 static VexValue coll_any(VexValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: any() expects 1 array argument\n"); return vex_nothing();
@@ -708,7 +657,6 @@ static VexValue coll_any(VexValue* args, int argc) {
     return vex_bool(false);
 }
 
-/* all(array) — returns true if all elements are truthy */
 static VexValue coll_all(VexValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: all() expects 1 array argument\n"); return vex_nothing();
@@ -720,18 +668,6 @@ static VexValue coll_all(VexValue* args, int argc) {
     return vex_bool(true);
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  ALGO MODULE — Algorithms
- *
- *  Overcomes: Python has no built-in binary search (needs bisect),
- *  no built-in GCD before 3.5, no is_prime. JavaScript has
- *  nothing. Most languages require importing or writing these.
- *
- *  binary_search, shuffle, gcd, lcm, is_prime, fibonacci,
- *  factorial, clamp, lerp
- * ══════════════════════════════════════════════════════════════ */
-
-/* binary_search(sorted_array, target) — returns index or -1 */
 static VexValue algo_binary_search(VexValue* args, int argc) {
     if (argc != 2 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: binary_search() expects (sorted_array, target)\n"); return vex_nothing();
@@ -748,7 +684,6 @@ static VexValue algo_binary_search(VexValue* args, int argc) {
     return vex_int(-1);
 }
 
-/* shuffle(array) — returns a new shuffled array */
 static VexValue algo_shuffle(VexValue* args, int argc) {
     if (argc != 1 || args[0].type != VAL_ARRAY) {
         fprintf(stderr, "Error: shuffle() expects 1 array argument\n"); return vex_nothing();
@@ -771,7 +706,6 @@ static VexValue algo_shuffle(VexValue* args, int argc) {
     return result;
 }
 
-/* gcd(a, b) — greatest common divisor */
 static VexValue algo_gcd(VexValue* args, int argc) {
     if (argc != 2) { fprintf(stderr, "Error: gcd() expects 2 arguments\n"); return vex_nothing(); }
     int64_t a = args[0].as.int_val, b = args[1].as.int_val;
@@ -781,7 +715,6 @@ static VexValue algo_gcd(VexValue* args, int argc) {
     return vex_int(a);
 }
 
-/* lcm(a, b) — least common multiple */
 static VexValue algo_lcm(VexValue* args, int argc) {
     if (argc != 2) { fprintf(stderr, "Error: lcm() expects 2 arguments\n"); return vex_nothing(); }
     int64_t a = args[0].as.int_val, b = args[1].as.int_val;
@@ -794,7 +727,6 @@ static VexValue algo_lcm(VexValue* args, int argc) {
     return vex_int(a / ga * b);
 }
 
-/* is_prime(n) — primality test */
 static VexValue algo_is_prime(VexValue* args, int argc) {
     if (argc != 1) { fprintf(stderr, "Error: is_prime() expects 1 argument\n"); return vex_nothing(); }
     int64_t n = args[0].as.int_val;
@@ -807,7 +739,6 @@ static VexValue algo_is_prime(VexValue* args, int argc) {
     return vex_bool(true);
 }
 
-/* fibonacci(n) — returns nth fibonacci number */
 static VexValue algo_fibonacci(VexValue* args, int argc) {
     if (argc != 1) { fprintf(stderr, "Error: fibonacci() expects 1 argument\n"); return vex_nothing(); }
     int64_t n = args[0].as.int_val;
@@ -818,7 +749,6 @@ static VexValue algo_fibonacci(VexValue* args, int argc) {
     return vex_int(b);
 }
 
-/* clamp(value, min, max) — constrain value between bounds */
 static VexValue algo_clamp(VexValue* args, int argc) {
     if (argc != 3) { fprintf(stderr, "Error: clamp() expects 3 arguments\n"); return vex_nothing(); }
     double v = args[0].type == VAL_INT ? (double)args[0].as.int_val : args[0].as.float_val;
@@ -831,7 +761,6 @@ static VexValue algo_clamp(VexValue* args, int argc) {
     return vex_float(v);
 }
 
-/* lerp(a, b, t) — linear interpolation: a + (b - a) * t */
 static VexValue algo_lerp(VexValue* args, int argc) {
     if (argc != 3) { fprintf(stderr, "Error: lerp() expects 3 arguments (a, b, t)\n"); return vex_nothing(); }
     double a = args[0].type == VAL_INT ? (double)args[0].as.int_val : args[0].as.float_val;
@@ -839,10 +768,6 @@ static VexValue algo_lerp(VexValue* args, int argc) {
     double t = args[2].type == VAL_INT ? (double)args[2].as.int_val : args[2].as.float_val;
     return vex_float(a + (b - a) * t);
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  MODULE REGISTRATION TABLE
- * ══════════════════════════════════════════════════════════════ */
 
 typedef struct {
     const char* name;
@@ -944,10 +869,6 @@ static ModuleTable modules[] = {
     {"algo",        algo_entries},
     {NULL, NULL}
 };
-
-/* ══════════════════════════════════════════════════════════════
- *  REGISTRATION API
- * ══════════════════════════════════════════════════════════════ */
 
 static void register_builtin(Environment* env, const char* name, BuiltinFn func) {
     VexValue val;

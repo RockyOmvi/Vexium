@@ -1,6 +1,5 @@
 #include "token.h"
 
-/* ── Return human-readable name for a token type ── */
 const char* token_type_name(TokenType type) {
     switch (type) {
 
@@ -104,7 +103,6 @@ const char* token_type_name(TokenType type) {
     return "UNKNOWN";
 }
 
-/* ── Print a token for debugging ── */
 void token_print(Token token) {
     printf("  [%3d:%-3d] %-15s '",
         token.line, token.column, token_type_name(token.type));

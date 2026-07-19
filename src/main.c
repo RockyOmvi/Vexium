@@ -5,10 +5,6 @@
 #include "parser.h"
 #include "interpreter.h"
 
-/* ══════════════════════════════════════════════════════════════
- *  FILE READING
- * ══════════════════════════════════════════════════════════════ */
-
 static char* read_file(const char* path) {
     FILE* file = fopen(path, "rb");
     if (file == NULL) {
@@ -33,10 +29,6 @@ static char* read_file(const char* path) {
     fclose(file);
     return buffer;
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  RUN FILE — Parse and EXECUTE
- * ══════════════════════════════════════════════════════════════ */
 
 static int run_file(const char* path) {
     char* source = read_file(path);
@@ -64,10 +56,6 @@ static int run_file(const char* path) {
     return exit_code;
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  AST DEBUG — show AST tree only
- * ══════════════════════════════════════════════════════════════ */
-
 static int ast_file(const char* path) {
     char* source = read_file(path);
     if (source == NULL) return 1;
@@ -93,10 +81,6 @@ static int ast_file(const char* path) {
     return 0;
 }
 
-/* ══════════════════════════════════════════════════════════════
- *  LEX FILE — Token debug mode
- * ══════════════════════════════════════════════════════════════ */
-
 static int lex_file(const char* path) {
     char* source = read_file(path);
     if (source == NULL) return 1;
@@ -120,10 +104,6 @@ static int lex_file(const char* path) {
     free(source);
     return 0;
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  REPL — Interactive interpreter
- * ══════════════════════════════════════════════════════════════ */
 
 static void run_repl(void) {
     char line[4096];
@@ -172,10 +152,6 @@ static void run_repl(void) {
 
     interpreter_free(&interp);
 }
-
-/* ══════════════════════════════════════════════════════════════
- *  MAIN
- * ══════════════════════════════════════════════════════════════ */
 
 static void print_usage(void) {
     printf("Vexium Programming Language v%s\n\n", VEXIUM_VERSION);
