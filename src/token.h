@@ -5,132 +5,118 @@
 
 /* ── Token Types ── */
 typedef enum {
-    /* Literals */
-    TOKEN_INT,              /* 42, 0xFF, 0b1010 */
-    TOKEN_FLOAT,            /* 3.14, 1.0e10 */
-    TOKEN_STRING,           /* "hello", 'world' */
 
-    /* Identifiers */
-    TOKEN_IDENTIFIER,       /* variable/function names */
+    TOKEN_INT,
+    TOKEN_FLOAT,
+    TOKEN_STRING,
 
-    /* Keywords: Variables */
-    TOKEN_LET,              /* let */
-    TOKEN_BE,               /* be */
-    TOKEN_CONST,            /* const */
+    TOKEN_IDENTIFIER,
 
-    /* Keywords: Functions */
-    TOKEN_FN,               /* fn */
-    TOKEN_GIVE_BACK,        /* give back (return) */
-    TOKEN_TASK,             /* task (async fn) */
-    TOKEN_PASS,             /* pass */
+    TOKEN_LET,
+    TOKEN_BE,
+    TOKEN_CONST,
 
-    /* Keywords: Control Flow */
-    TOKEN_IF,               /* if */
-    TOKEN_ELIF,             /* elif */
-    TOKEN_ELSE,             /* else */
-    TOKEN_WHILE,            /* while */
-    TOKEN_FOR,              /* for */
-    TOKEN_EACH,             /* each */
-    TOKEN_REPEAT,           /* repeat */
-    TOKEN_TIMES,            /* times */
-    TOKEN_IN,               /* in */
-    TOKEN_TO,               /* to */
-    TOKEN_BY,               /* by */
-    TOKEN_BREAK,            /* break */
-    TOKEN_SKIP,             /* skip (continue) */
-    TOKEN_MATCH,            /* match */
+    TOKEN_FN,
+    TOKEN_GIVE_BACK,
+    TOKEN_TASK,
+    TOKEN_PASS,
 
-    /* Keywords: Logic & Values */
-    TOKEN_AND,              /* and */
-    TOKEN_OR,               /* or */
-    TOKEN_NOT,              /* not */
-    TOKEN_IS,               /* is */
-    TOKEN_TRUE,             /* true */
-    TOKEN_FALSE,            /* false */
-    TOKEN_NOTHING,          /* nothing */
+    TOKEN_IF,
+    TOKEN_ELIF,
+    TOKEN_ELSE,
+    TOKEN_WHILE,
+    TOKEN_FOR,
+    TOKEN_EACH,
+    TOKEN_REPEAT,
+    TOKEN_TIMES,
+    TOKEN_IN,
+    TOKEN_TO,
+    TOKEN_BY,
+    TOKEN_BREAK,
+    TOKEN_SKIP,
+    TOKEN_MATCH,
 
-    /* Keywords: Structure */
-    TOKEN_USE,              /* use */
-    TOKEN_FROM,             /* from */
-    TOKEN_STRUCT,           /* struct */
-    TOKEN_HAS,              /* has */
-    TOKEN_CAN,              /* can */
-    TOKEN_SELF,             /* self */
-    TOKEN_ATTEMPT,          /* attempt */
-    TOKEN_OTHERWISE,        /* otherwise */
-    TOKEN_UNSAFE,           /* unsafe */
-    TOKEN_EXTENDS,          /* extends */
+    TOKEN_AND,
+    TOKEN_OR,
+    TOKEN_NOT,
+    TOKEN_IS,
+    TOKEN_TRUE,
+    TOKEN_FALSE,
+    TOKEN_NOTHING,
 
-    /* Keywords: I/O */
-    TOKEN_DISPLAY,          /* display */
+    TOKEN_USE,
+    TOKEN_FROM,
+    TOKEN_STRUCT,
+    TOKEN_HAS,
+    TOKEN_CAN,
+    TOKEN_SELF,
+    TOKEN_ATTEMPT,
+    TOKEN_OTHERWISE,
+    TOKEN_UNSAFE,
+    TOKEN_EXTENDS,
 
-    /* English compound operators (multi-word, resolved by lexer) */
-    TOKEN_IS_NOT,           /* is not */
-    TOKEN_IS_GREATER,       /* is greater than */
-    TOKEN_IS_LESS,          /* is less than */
-    TOKEN_IS_AT_LEAST,      /* is at least */
-    TOKEN_IS_AT_MOST,       /* is at most */
-    TOKEN_NOT_EXISTS,       /* not exists in */
-    TOKEN_EXISTS,           /* exists in */
+    TOKEN_DISPLAY,
 
-    /* Arithmetic Operators */
-    TOKEN_PLUS,             /* + */
-    TOKEN_MINUS,            /* - */
-    TOKEN_STAR,             /* * */
-    TOKEN_SLASH,            /* / */
-    TOKEN_PERCENT,          /* % */
-    TOKEN_POWER,            /* ** */
+    TOKEN_IS_NOT,
+    TOKEN_IS_GREATER,
+    TOKEN_IS_LESS,
+    TOKEN_IS_AT_LEAST,
+    TOKEN_IS_AT_MOST,
+    TOKEN_NOT_EXISTS,
+    TOKEN_EXISTS,
 
-    /* Comparison Operators */
-    TOKEN_EQ,               /* == */
-    TOKEN_NEQ,              /* != */
-    TOKEN_LT,               /* < */
-    TOKEN_GT,               /* > */
-    TOKEN_LTE,              /* <= */
-    TOKEN_GTE,              /* >= */
+    TOKEN_PLUS,
+    TOKEN_MINUS,
+    TOKEN_STAR,
+    TOKEN_SLASH,
+    TOKEN_PERCENT,
+    TOKEN_POWER,
 
-    /* Assignment */
-    TOKEN_ASSIGN,           /* = */
-    TOKEN_PLUS_ASSIGN,      /* += */
-    TOKEN_MINUS_ASSIGN,     /* -= */
-    TOKEN_STAR_ASSIGN,      /* *= */
-    TOKEN_SLASH_ASSIGN,     /* /= */
+    TOKEN_EQ,
+    TOKEN_NEQ,
+    TOKEN_LT,
+    TOKEN_GT,
+    TOKEN_LTE,
+    TOKEN_GTE,
 
-    /* Delimiters */
-    TOKEN_LPAREN,           /* ( */
-    TOKEN_RPAREN,           /* ) */
-    TOKEN_LBRACKET,         /* [ */
-    TOKEN_RBRACKET,         /* ] */
-    TOKEN_LBRACE,           /* { */
-    TOKEN_RBRACE,           /* } */
-    TOKEN_COMMA,            /* , */
-    TOKEN_DOT,              /* . */
-    TOKEN_COLON,            /* : */
-    TOKEN_ARROW,            /* -> */
-    TOKEN_FAT_ARROW,        /* => */
+    TOKEN_ASSIGN,
+    TOKEN_PLUS_ASSIGN,
+    TOKEN_MINUS_ASSIGN,
+    TOKEN_STAR_ASSIGN,
+    TOKEN_SLASH_ASSIGN,
+
+    TOKEN_LPAREN,
+    TOKEN_RPAREN,
+    TOKEN_LBRACKET,
+    TOKEN_RBRACKET,
+    TOKEN_LBRACE,
+    TOKEN_RBRACE,
+    TOKEN_COMMA,
+    TOKEN_DOT,
+    TOKEN_COLON,
+    TOKEN_ARROW,
+    TOKEN_FAT_ARROW,
     TOKEN_AT,               /* @ */
 
-    /* Indentation (Python-style) */
-    TOKEN_NEWLINE,          /* end of logical line */
-    TOKEN_INDENT,           /* increase in indentation */
-    TOKEN_DEDENT,           /* decrease in indentation */
+    TOKEN_NEWLINE,
+    TOKEN_INDENT,
+    TOKEN_DEDENT,
 
-    /* Special */
-    TOKEN_EOF,              /* end of file */
-    TOKEN_ERROR             /* lexer error */
+    TOKEN_EOF,
+    TOKEN_ERROR
 } TokenType;
 
 /* ── Token Structure ── */
 typedef struct {
     TokenType type;
-    const char* start;     /* pointer into source string */
-    int length;            /* length of the token text */
-    int line;              /* 1-based line number */
-    int column;            /* 1-based column number */
+    const char* start;
+    int length;
+    int line;
+    int column;
 } Token;
 
 /* ── Token Utilities ── */
 const char* token_type_name(TokenType type);
 void token_print(Token token);
 
-#endif /* VEXIUM_TOKEN_H */
+#endif

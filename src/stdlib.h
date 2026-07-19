@@ -21,4 +21,4 @@ bool stdlib_load_module(const char* module_name, Environment* env);
  * Returns true if found, false otherwise. */
 bool stdlib_load_symbol(const char* module_name, const char* symbol_name, Environment* env);
 
-#endif /* VEXIUM_STDLIB_H */
+#endif

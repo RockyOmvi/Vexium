@@ -2,7 +2,7 @@
 #define _POSIX_C_SOURCE 199309L
 #endif
 #ifdef _WIN32
-/* Must rename Windows' TokenType before including our headers */
+
 #define TokenType WindowsTokenType
 #include <windows.h>
 #undef TokenType
@@ -203,7 +203,6 @@ static VexValue str_replace(VexValue* args, int argc) {
     int new_len = args[2].as.string_val.length;
     if (old_len == 0) return args[0];
 
-    /* Count occurrences */
     int count = 0;
     const char* p = src;
     while ((p = strstr(p, old_s)) != NULL) { count++; p += old_len; }
@@ -240,7 +239,7 @@ static VexValue str_split(VexValue* args, int argc) {
     int dlen = args[1].as.string_val.length;
 
     if (dlen == 0) {
-        /* Split each character */
+
         for (int i = 0; i < args[0].as.string_val.length; i++) {
             ValueArray* arr = result.as.array_val;
             if (arr->count >= arr->capacity) {
@@ -278,7 +277,6 @@ static VexValue str_join(VexValue* args, int argc) {
     int sep_len = args[0].type == VAL_STRING ? args[0].as.string_val.length : 0;
     ValueArray* arr = args[1].as.array_val;
 
-    /* Calculate total size */
     int total = 0;
     for (int i = 0; i < arr->count; i++) {
         if (arr->items[i].type == VAL_STRING) total += arr->items[i].as.string_val.length;
@@ -459,7 +457,6 @@ static VexValue sys_platform(VexValue* args, int argc) {
  *  reversed_array, unique
  * ══════════════════════════════════════════════════════════════ */
 
-/* Helper: compare two VexValues for sorting */
 static int vex_compare(const void* a, const void* b) {
     const VexValue* va = (const VexValue*)a;
     const VexValue* vb = (const VexValue*)b;
@@ -475,7 +472,6 @@ static int vex_compare(const void* a, const void* b) {
     return 0;
 }
 
-/* Helper: push value to dynamic array */
 static void arr_push(ValueArray* arr, VexValue val) {
     if (arr->count >= arr->capacity) {
         arr->capacity = arr->capacity == 0 ? 8 : arr->capacity * 2;
@@ -531,8 +527,8 @@ static VexValue coll_insert(VexValue* args, int argc) {
     if (idx < 0) idx += arr->count;
     if (idx < 0 || idx > arr->count) { fprintf(stderr, "Error: insert() index out of bounds\n"); return vex_nothing(); }
 
-    arr_push(arr, vex_nothing()); /* grow */
-    /* Shift elements right */
+    arr_push(arr, vex_nothing());
+
     for (int i = arr->count - 1; i > idx; i--) arr->items[i] = arr->items[i-1];
     arr->items[idx] = args[2];
     return vex_nothing();
@@ -765,7 +761,7 @@ static VexValue algo_shuffle(VexValue* args, int argc) {
     result.as.array_val->capacity = src->count;
     result.as.array_val->items = (VexValue*)malloc(sizeof(VexValue) * src->count);
     memcpy(result.as.array_val->items, src->items, sizeof(VexValue) * src->count);
-    /* Fisher-Yates shuffle */
+
     for (int i = src->count - 1; i > 0; i--) {
         int j = rand() % (i + 1);
         VexValue tmp = result.as.array_val->items[i];
@@ -792,7 +788,7 @@ static VexValue algo_lcm(VexValue* args, int argc) {
     if (a < 0) a = -a;
     if (b < 0) b = -b;
     if (a == 0 || b == 0) return vex_int(0);
-    /* Use GCD to compute LCM */
+
     int64_t ga = a, gb = b;
     while (gb != 0) { int64_t t = gb; gb = ga % gb; ga = t; }
     return vex_int(a / ga * b);
@@ -934,7 +930,6 @@ static StdlibEntry algo_entries[] = {
     {NULL, NULL}
 };
 
-/* Module table */
 typedef struct {
     const char* module_name;
     StdlibEntry* entries;
@@ -963,14 +958,13 @@ static void register_builtin(Environment* env, const char* name, BuiltinFn func)
 }
 
 bool stdlib_load_module(const char* module_name, Environment* env) {
-    /* Seed random on first math load */
+
     static bool rand_seeded = false;
     if (!rand_seeded && strcmp(module_name, "math") == 0) {
         srand((unsigned int)time(NULL));
         rand_seeded = true;
     }
 
-    /* Register math constants */
     if (strcmp(module_name, "math") == 0) {
         env_define(env, "PI", vex_float(3.14159265358979323846), true);
         env_define(env, "E",  vex_float(2.71828182845904523536), true);
@@ -1000,7 +994,7 @@ bool stdlib_load_symbol(const char* module_name, const char* symbol_name, Enviro
                     return true;
                 }
             }
-            /* Check for math constants */
+
             if (strcmp(module_name, "math") == 0) {
                 if (strcmp(symbol_name, "PI") == 0) { env_define(env, "PI", vex_float(3.14159265358979323846), true); return true; }
                 if (strcmp(symbol_name, "E") == 0) { env_define(env, "E", vex_float(2.71828182845904523536), true); return true; }

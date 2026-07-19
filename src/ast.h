@@ -10,66 +10,63 @@
 
 typedef enum {
     /* ── Expressions ── */
-    NODE_INT_LITERAL,       /* 42, 0xFF, 0b1010 */
-    NODE_FLOAT_LITERAL,     /* 3.14 */
-    NODE_STRING_LITERAL,    /* "hello" */
-    NODE_BOOL_LITERAL,      /* true, false */
-    NODE_NOTHING_LITERAL,   /* nothing */
-    NODE_IDENTIFIER,        /* variable names */
-    NODE_BINARY_OP,         /* a + b, x is greater than y */
-    NODE_UNARY_OP,          /* not x, -x */
-    NODE_CALL,              /* foo(x, y) */
-    NODE_INDEX,             /* arr[0] */
-    NODE_FIELD_ACCESS,      /* obj.name */
-    NODE_ARRAY_LITERAL,     /* [1, 2, 3] */
-    NODE_MAP_LITERAL,       /* {"a": 1, "b": 2} */
-    NODE_ASSIGN,            /* x be 5, x = 5 */
-    NODE_LAMBDA,            /* (a, b) => a + b */
-    NODE_LIST_COMP,         /* [x * 2 for each x in arr if x > 3] */
+    NODE_INT_LITERAL,
+    NODE_FLOAT_LITERAL,
+    NODE_STRING_LITERAL,
+    NODE_BOOL_LITERAL,
+    NODE_NOTHING_LITERAL,
+    NODE_IDENTIFIER,
+    NODE_BINARY_OP,
+    NODE_UNARY_OP,
+    NODE_CALL,
+    NODE_INDEX,
+    NODE_FIELD_ACCESS,
+    NODE_ARRAY_LITERAL,
+    NODE_MAP_LITERAL,
+    NODE_ASSIGN,
+    NODE_LAMBDA,
+    NODE_LIST_COMP,
 
     /* ── Statements ── */
-    NODE_LET_DECL,          /* let x be 5 */
-    NODE_CONST_DECL,        /* const x be 5 */
-    NODE_EXPR_STMT,         /* expression as statement */
-    NODE_DISPLAY,           /* display "hello" */
-    NODE_IF,                /* if/elif/else */
-    NODE_WHILE,             /* while loop */
-    NODE_FOR_RANGE,         /* for i in 1 to 10 */
-    NODE_FOR_EACH,          /* for each item in list */
-    NODE_REPEAT,            /* repeat N times */
-    NODE_FN_DECL,           /* fn name(params): body */
-    NODE_GIVE_BACK,         /* give back value */
-    NODE_BREAK,             /* break */
-    NODE_SKIP,              /* skip (continue) */
-    NODE_STRUCT_DECL,       /* struct Name: has/can */
-    NODE_MATCH,             /* match expr: cases */
-    NODE_USE,               /* use module */
-    NODE_FROM_USE,          /* from module use name */
-    NODE_ATTEMPT,           /* attempt/otherwise */
-    NODE_PASS,              /* pass */
-    NODE_BLOCK,             /* indented block of statements */
-    NODE_PROGRAM            /* top-level program */
+    NODE_LET_DECL,
+    NODE_CONST_DECL,
+    NODE_EXPR_STMT,
+    NODE_DISPLAY,
+    NODE_IF,
+    NODE_WHILE,
+    NODE_FOR_RANGE,
+    NODE_FOR_EACH,
+    NODE_REPEAT,
+    NODE_FN_DECL,
+    NODE_GIVE_BACK,
+    NODE_BREAK,
+    NODE_SKIP,
+    NODE_STRUCT_DECL,
+    NODE_MATCH,
+    NODE_USE,
+    NODE_FROM_USE,
+    NODE_ATTEMPT,
+    NODE_PASS,
+    NODE_BLOCK,
+    NODE_PROGRAM
 } NodeType;
 
 /* ══════════════════════════════════════════════════════════════
  *  AST NODE STRUCTURE (tagged union)
  * ══════════════════════════════════════════════════════════════ */
 
-/* Forward declaration */
 typedef struct ASTNode ASTNode;
 
-/* Dynamic array of AST nodes */
 typedef struct {
     ASTNode** items;
     int count;
     int capacity;
 } NodeList;
 
-/* Function parameter */
 typedef struct {
     char* name;
-    char* type_name;    /* NULL if no type annotation */
-    ASTNode* default_value; /* NULL if no default */
+    char* type_name;
+    ASTNode* default_value;
 } Param;
 
 typedef struct {
@@ -78,7 +75,6 @@ typedef struct {
     int capacity;
 } ParamList;
 
-/* Match case arm */
 typedef struct {
     ASTNode* pattern;
     ASTNode* body;
@@ -90,13 +86,11 @@ typedef struct {
     int capacity;
 } MatchArmList;
 
-/* Struct field */
 typedef struct {
     char* name;
     char* type_name;
 } StructField;
 
-/* Struct method */
 typedef struct {
     char* name;
     ParamList params;
@@ -104,7 +98,6 @@ typedef struct {
     ASTNode* body;
 } StructMethod;
 
-/* Map entry (key-value pair) */
 typedef struct {
     ASTNode* key;
     ASTNode* value;
@@ -117,123 +110,104 @@ struct ASTNode {
     int column;
 
     union {
-        /* Literals */
+
         struct { int64_t value; } int_literal;
         struct { double value; } float_literal;
         struct { char* value; int length; } string_literal;
         struct { bool value; } bool_literal;
 
-        /* Identifier */
         struct { char* name; } identifier;
 
-        /* Binary op: left OP right */
         struct {
             ASTNode* left;
             ASTNode* right;
             TokenType op;
         } binary;
 
-        /* Unary op: OP operand */
         struct {
             ASTNode* operand;
             TokenType op;
         } unary;
 
-        /* Function call: callee(args) */
         struct {
             ASTNode* callee;
             NodeList args;
         } call;
 
-        /* Index: object[index] */
         struct {
             ASTNode* object;
             ASTNode* index;
         } index_access;
 
-        /* Field access: object.field */
         struct {
             ASTNode* object;
             char* field;
         } field_access;
 
-        /* Array literal: [items] */
         struct { NodeList elements; } array_literal;
 
-        /* Map literal: {entries} */
         struct {
             MapEntry* entries;
             int count;
             int capacity;
         } map_literal;
 
-        /* Assignment: target be value */
         struct {
             ASTNode* target;
             ASTNode* value;
-            TokenType op;   /* TOKEN_BE or TOKEN_ASSIGN, TOKEN_PLUS_ASSIGN, etc */
+            TokenType op;
         } assign;
 
-        /* let x be 5 / const x be 5 */
         struct {
             char* name;
-            char* type_name;   /* optional type annotation */
+            char* type_name;
             ASTNode* value;
         } var_decl;
 
-        /* display expr */
         struct { ASTNode* value; } display;
 
-        /* if / elif / else */
         struct {
             ASTNode* condition;
             ASTNode* then_block;
-            ASTNode* else_block;   /* can be another if (elif) or block (else) */
+            ASTNode* else_block;
         } if_stmt;
 
-        /* while condition: body */
         struct {
             ASTNode* condition;
             ASTNode* body;
         } while_stmt;
 
-        /* for i in start to end (by step): body */
         struct {
             char* var_name;
             ASTNode* start;
             ASTNode* end;
-            ASTNode* step;      /* NULL if no step */
+            ASTNode* step;
             ASTNode* body;
         } for_range;
 
-        /* for each item in iterable: body */
         struct {
             char* var_name;
             ASTNode* iterable;
             ASTNode* body;
         } for_each;
 
-        /* repeat N times: body */
         struct {
             ASTNode* count;
             ASTNode* body;
         } repeat;
 
-        /* fn name(params) -> return_type: body */
         struct {
             char* name;
             ParamList params;
-            char* return_type;   /* NULL if no return type */
+            char* return_type;
             ASTNode* body;
         } fn_decl;
 
-        /* give back value */
         struct { ASTNode* value; } give_back;
 
-        /* struct Name [extends Parent]: fields + methods */
         struct {
             char* name;
-            char* parent_name;     /* NULL if no inheritance */
+            char* parent_name;
             StructField* fields;
             int field_count;
             int field_capacity;
@@ -245,46 +219,38 @@ struct ASTNode {
         /* (params) => expr — lambda */
         struct {
             ParamList params;
-            ASTNode* body;         /* single expression or block */
+            ASTNode* body;
         } lambda;
 
-        /* [expr for each var in iterable (if cond)] */
         struct {
-            ASTNode* expr;         /* transform expression */
-            char* var_name;        /* iteration variable */
-            ASTNode* iterable;     /* source collection */
-            ASTNode* condition;    /* optional filter (NULL if none) */
+            ASTNode* expr;
+            char* var_name;
+            ASTNode* iterable;
+            ASTNode* condition;
         } list_comp;
 
-        /* match expr: arms */
         struct {
             ASTNode* expr;
             MatchArmList arms;
         } match_stmt;
 
-        /* use module */
         struct { char* module_name; } use_stmt;
 
-        /* from module use name */
         struct {
             char* module_name;
             char* import_name;
         } from_use;
 
-        /* attempt: body otherwise err: handler */
         struct {
             ASTNode* try_block;
             char* error_name;
             ASTNode* catch_block;
         } attempt;
 
-        /* Block of statements */
         struct { NodeList statements; } block;
 
-        /* Program (top-level) */
         struct { NodeList statements; } program;
 
-        /* Expression statement */
         struct { ASTNode* expr; } expr_stmt;
     } as;
 };
@@ -293,24 +259,19 @@ struct ASTNode {
  *  AST API
  * ══════════════════════════════════════════════════════════════ */
 
-/* Node creation */
 ASTNode* ast_new_node(NodeType type, int line, int column);
 
-/* NodeList helpers */
 void nodelist_init(NodeList* list);
 void nodelist_add(NodeList* list, ASTNode* node);
 
-/* ParamList helpers */
 void paramlist_init(ParamList* list);
 void paramlist_add(ParamList* list, const char* name, const char* type_name);
 
-/* Printing */
 void ast_print(ASTNode* node, int indent);
 
-/* Memory management */
 void ast_free(ASTNode* node);
 
 /* Utility — duplicate a string */
 char* vex_strdup(const char* src, int length);
 
-#endif /* VEXIUM_AST_H */
+#endif

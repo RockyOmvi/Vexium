@@ -22,23 +22,19 @@ typedef enum {
     VAL_BUILTIN_FN
 } ValueType;
 
-/* Forward declarations for pointer-only usage */
 typedef struct VexValue VexValue;
 typedef struct Environment Environment;
 typedef struct ValueArray ValueArray;
 typedef struct ValueMap ValueMap;
 typedef struct InstanceValue InstanceValue;
 
-/* Built-in function signature */
 typedef VexValue (*BuiltinFn)(VexValue* args, int arg_count);
 
-/* Function value (captures closure) */
 typedef struct {
     ASTNode* decl;
     Environment* closure;
 } FnValue;
 
-/* Struct definition */
 typedef struct {
     char* name;
     ASTNode* decl;
@@ -158,4 +154,4 @@ void interpreter_free(Interpreter* interp);
 VexValue interpret(Interpreter* interp, ASTNode* node, Environment* env);
 void interpret_program(Interpreter* interp, ASTNode* program);
 
-#endif /* VEXIUM_INTERPRETER_H */
+#endif

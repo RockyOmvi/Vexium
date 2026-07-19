@@ -18,4 +18,4 @@ typedef struct {
 void parser_init(Parser* parser, const char* source);
 ASTNode* parser_parse(Parser* parser);
 
-#endif /* VEXIUM_PARSER_H */
+#endif

@@ -147,7 +147,6 @@ static void run_repl(void) {
             break;
         }
 
-        /* Skip empty lines */
         if (line[0] == '\n' || line[0] == '\r') continue;
 
         Parser parser;
@@ -156,7 +155,7 @@ static void run_repl(void) {
 
         if (!parser.had_error) {
             VexValue result = interpret(&interp, program, interp.global_env);
-            /* Show expression results in REPL (if not nothing) */
+
             if (result.type != VAL_NOTHING &&
                 program->as.program.statements.count == 1 &&
                 program->as.program.statements.items[0]->type == NODE_EXPR_STMT) {
@@ -225,7 +224,6 @@ int main(int argc, char* argv[]) {
         return run_file(argv[2]);
     }
 
-    /* If just a filename, run it directly */
     if (argc == 2) {
         return run_file(argv[1]);
     }

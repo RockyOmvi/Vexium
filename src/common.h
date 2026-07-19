@@ -20,7 +20,6 @@ typedef int bool;
 
 #define UNUSED(x) (void)(x)
 
-/* Helper to duplicate a string with a known length */
 static inline char* vex_strdup(const char* src, int len) {
     char* dst = (char*)malloc(len + 1);
     memcpy(dst, src, len);
@@ -28,4 +27,4 @@ static inline char* vex_strdup(const char* src, int len) {
     return dst;
 }
 
-#endif /* VEXIUM_COMMON_H */
+#endif

@@ -183,7 +183,6 @@ void env_define(Environment* env, const char* name, VexValue value, bool is_cons
         }
     }
 
-    /* Grow */
     if (env->count >= env->capacity) {
         env->capacity = env->capacity == 0 ? 8 : env->capacity * 2;
         env->entries = (EnvEntry*)realloc(env->entries,
@@ -366,14 +365,14 @@ static VexValue builtin_range(VexValue* args, int argc) {
  * ══════════════════════════════════════════════════════════════ */
 
 static char* interpolate_string(const char* src, int src_len, Environment* env) {
-    /* Budget: grow buffer as needed */
+
     int cap = src_len * 2 + 1;
     char* result = (char*)malloc(cap);
     int out = 0;
 
     for (int i = 0; i < src_len; i++) {
         if (src[i] == '{') {
-            /* Find closing brace */
+
             int start = i + 1;
             int depth = 1;
             i++;
@@ -382,15 +381,14 @@ static char* interpolate_string(const char* src, int src_len, Environment* env) 
                 else if (src[i] == '}') depth--;
                 if (depth > 0) i++;
             }
-            /* Extract expression (may contain dots like self.name) */
+
             int name_len = i - start;
             char* expr = vex_strdup(src + start, name_len);
 
-            /* Resolve dot-access: split on '.' and walk fields */
             char* vs;
             char* dot = strchr(expr, '.');
             if (dot) {
-                /* Split: base.field1.field2... */
+
                 *dot = '\0';
                 VexValue* base_val = env_get(env, expr);
                 if (base_val) {
@@ -473,7 +471,6 @@ static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env
     VexValue right = eval(interp, node->as.binary.right, env);
     TokenType op = node->as.binary.op;
 
-    /* String concatenation */
     if (op == TOKEN_PLUS && left.type == VAL_STRING && right.type == VAL_STRING) {
         int new_len = left.as.string_val.length + right.as.string_val.length;
         char* buf = (char*)malloc(new_len + 1);
@@ -485,7 +482,6 @@ static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env
         return result;
     }
 
-    /* String repetition: "ha" * 3 = "hahaha" */
     if (op == TOKEN_STAR && left.type == VAL_STRING && right.type == VAL_INT) {
         int rep = (int)right.as.int_val;
         int new_len = left.as.string_val.length * rep;
@@ -498,7 +494,6 @@ static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env
         return result;
     }
 
-    /* Numeric ops */
     if (is_numeric(left) && is_numeric(right)) {
         bool use_float = (left.type == VAL_FLOAT || right.type == VAL_FLOAT);
 
@@ -536,7 +531,6 @@ static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env
                     ? vex_int((int64_t)result) : vex_float(result);
             }
 
-            /* Comparison — numeric */
             case TOKEN_LT: case TOKEN_IS_LESS:
                 return vex_bool(to_double(left) < to_double(right));
             case TOKEN_GT: case TOKEN_IS_GREATER:
@@ -555,7 +549,6 @@ static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env
         }
     }
 
-    /* Equality for any type */
     if (op == TOKEN_EQ || op == TOKEN_IS) {
         if (left.type != right.type) return vex_bool(false);
         switch (left.type) {
@@ -579,7 +572,6 @@ static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env
         }
     }
 
-    /* Logical */
     if (op == TOKEN_AND) return vex_bool(vex_is_truthy(left) && vex_is_truthy(right));
     if (op == TOKEN_OR)  return vex_bool(vex_is_truthy(left) || vex_is_truthy(right));
 
@@ -598,7 +590,7 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
         const char* method_name = fa->as.field_access.field;
 
         if (obj.type == VAL_INSTANCE) {
-            /* Evaluate arguments */
+
             VexValue* args = NULL;
             if (argc > 0) {
                 args = (VexValue*)malloc(sizeof(VexValue) * argc);
@@ -615,7 +607,6 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
 
     VexValue callee = eval(interp, node->as.call.callee, env);
 
-    /* Evaluate all arguments */
     VexValue* args = NULL;
     if (argc > 0) {
         args = (VexValue*)malloc(sizeof(VexValue) * argc);
@@ -633,7 +624,6 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
         ASTNode* fn = callee.as.fn_val.decl;
         Environment* fn_env = env_new(callee.as.fn_val.closure);
 
-        /* Bind parameters (with default value support) */
         int param_count = fn->as.fn_decl.params.count;
         for (int i = 0; i < param_count; i++) {
             if (i < argc) {
@@ -646,10 +636,8 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
             }
         }
 
-        /* Execute body */
         result = eval(interp, fn->as.fn_decl.body, fn_env);
 
-        /* Check for return signal */
         if (interp->signal.type == SIGNAL_RETURN) {
             result = interp->signal.return_value;
             interp->signal.type = SIGNAL_NONE;
@@ -665,14 +653,13 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
         inst->closure = callee.as.fn_val.closure;
         if (inst->closure) env_retain(inst->closure);
 
-        /* Initialize fields from struct definition */
         ASTNode* sd = callee.as.struct_def.decl;
         inst->fields.entries = NULL;
         inst->fields.count = 0;
         inst->fields.capacity = 0;
 
         for (int i = 0; i < sd->as.struct_decl.field_count; i++) {
-            /* Grow map */
+
             if (inst->fields.count >= inst->fields.capacity) {
                 inst->fields.capacity = inst->fields.capacity == 0 ? 4 : inst->fields.capacity * 2;
                 inst->fields.entries = (ValueMapEntry*)realloc(inst->fields.entries,
@@ -681,14 +668,13 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
             ValueMapEntry* e = &inst->fields.entries[inst->fields.count++];
             e->key = vex_strdup(sd->as.struct_decl.fields[i].name,
                 (int)strlen(sd->as.struct_decl.fields[i].name));
-            /* Use constructor arg if available, otherwise nothing */
+
             e->value = (i < argc) ? args[i] : vex_nothing();
         }
 
         result.type = VAL_INSTANCE;
         result.as.instance_val = inst;
 
-        /* Auto-call init() constructor if it exists */
         for (int i = 0; i < sd->as.struct_decl.method_count; i++) {
             if (strcmp(sd->as.struct_decl.methods[i].name, "init") == 0) {
                 eval_method_call(interp, inst, "init", args, argc, env);
@@ -710,7 +696,6 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
 static VexValue eval_method_call(Interpreter* interp, InstanceValue* inst,
     const char* method_name, VexValue* args, int argc, Environment* env) {
 
-    /* Look for method in this struct and parent chain */
     ASTNode* sd = inst->decl;
     while (sd != NULL) {
         for (int i = 0; i < sd->as.struct_decl.method_count; i++) {
@@ -718,7 +703,6 @@ static VexValue eval_method_call(Interpreter* interp, InstanceValue* inst,
                 StructMethod* m = &sd->as.struct_decl.methods[i];
                 Environment* m_env = env_new(env);
 
-                /* Auto-bind self */
                 VexValue self_val;
                 self_val.type = VAL_INSTANCE;
                 self_val.as.instance_val = inst;
@@ -747,7 +731,7 @@ static VexValue eval_method_call(Interpreter* interp, InstanceValue* inst,
                 return result;
             }
         }
-        /* Walk up to parent struct */
+
         if (sd->as.struct_decl.parent_name) {
             VexValue* parent_def = env_get(env, sd->as.struct_decl.parent_name);
             if (parent_def && parent_def->type == VAL_STRUCT_DEF) {
@@ -779,7 +763,7 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
         case NODE_FLOAT_LITERAL:
             return vex_float(node->as.float_literal.value);
         case NODE_STRING_LITERAL: {
-            /* Handle string interpolation */
+
             char* interp_str = interpolate_string(
                 node->as.string_literal.value,
                 node->as.string_literal.length, env);
@@ -830,7 +814,7 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             VexValue idx = eval(interp, node->as.index_access.index, env);
             if (obj.type == VAL_ARRAY && idx.type == VAL_INT) {
                 int i = (int)idx.as.int_val;
-                if (i < 0) i += obj.as.array_val->count; /* negative indexing */
+                if (i < 0) i += obj.as.array_val->count;
                 if (i >= 0 && i < obj.as.array_val->count)
                     return obj.as.array_val->items[i];
                 fprintf(stderr, "Error [line %d]: Index %d out of bounds\n", node->line, (int)idx.as.int_val);
@@ -859,7 +843,7 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             VexValue obj = eval(interp, node->as.field_access.object, env);
             const char* field = node->as.field_access.field;
             if (obj.type == VAL_INSTANCE) {
-                /* Look up in instance fields */
+
                 for (int i = 0; i < obj.as.instance_val->fields.count; i++) {
                     if (strcmp(obj.as.instance_val->fields.entries[i].key, field) == 0)
                         return obj.as.instance_val->fields.entries[i].value;
@@ -872,7 +856,7 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
                         return obj.as.map_val->entries[i].value;
                 }
             }
-            /* Method chaining: arr.length, str.length */
+
             if (obj.type == VAL_ARRAY && strcmp(field, "length") == 0)
                 return vex_int(obj.as.array_val->count);
             if (obj.type == VAL_STRING && strcmp(field, "length") == 0)
@@ -964,12 +948,12 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
                     env_set(env, name, new_val);
                 }
             }
-            /* Field assignment: obj.field be value */
+
             else if (node->as.assign.target->type == NODE_FIELD_ACCESS) {
                 VexValue obj = eval(interp, node->as.assign.target->as.field_access.object, env);
                 const char* field = node->as.assign.target->as.field_access.field;
                 if (obj.type == VAL_INSTANCE) {
-                    /* Try to update existing field */
+
                     for (int i = 0; i < obj.as.instance_val->fields.count; i++) {
                         if (strcmp(obj.as.instance_val->fields.entries[i].key, field) == 0) {
                             obj.as.instance_val->fields.entries[i].value = value;
@@ -989,7 +973,7 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
                     return value;
                 }
                 if (obj.type == VAL_MAP) {
-                    /* Set/create field on map */
+
                     for (int i = 0; i < obj.as.map_val->count; i++) {
                         if (strcmp(obj.as.map_val->entries[i].key, field) == 0) {
                             obj.as.map_val->entries[i].value = value;
@@ -1008,7 +992,7 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
                     return value;
                 }
             }
-            /* Index assignment: arr[i] be value */
+
             else if (node->as.assign.target->type == NODE_INDEX) {
                 VexValue obj = eval(interp, node->as.assign.target->as.index_access.object, env);
                 VexValue idx = eval(interp, node->as.assign.target->as.index_access.index, env);
@@ -1189,12 +1173,11 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             sd.as.struct_def.decl = node;
             env_define(env, node->as.struct_decl.name, sd, false);
 
-            /* If extends parent, copy parent fields into this struct's decl */
             if (node->as.struct_decl.parent_name) {
                 VexValue* parent = env_get(env, node->as.struct_decl.parent_name);
                 if (parent && parent->type == VAL_STRUCT_DEF) {
                     /* Parent fields are inherited — they'll be resolved at instance creation */
-                    /* Methods are resolved via chain in eval_method_call */
+
                 } else {
                     fprintf(stderr, "Error [line %d]: Parent struct '%s' not found\n",
                         node->line, node->as.struct_decl.parent_name);
@@ -1235,7 +1218,6 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
                 Environment* comp_env = env_new(env);
                 env_define(comp_env, node->as.list_comp.var_name, src->items[i], false);
 
-                /* Check filter condition if present */
                 bool include = true;
                 if (node->as.list_comp.condition) {
                     VexValue cond = eval(interp, node->as.list_comp.condition, comp_env);
@@ -1297,7 +1279,7 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
 
         /* ── Attempt / Otherwise ── */
         case NODE_ATTEMPT: {
-            /* Simple: run try block, if error run catch block */
+
             bool had_err_before = interp->had_error;
             interp->had_error = false;
             eval(interp, node->as.attempt.try_block, env);
@@ -1355,7 +1337,6 @@ void interpreter_init(Interpreter* interp) {
     interp->signal.type = SIGNAL_NONE;
     interp->had_error = false;
 
-    /* Register built-in functions */
     VexValue v;
 
     v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_len; v.as.builtin_fn.name = "len";
@@ -1385,7 +1366,6 @@ void interpreter_init(Interpreter* interp) {
     v.type = VAL_BUILTIN_FN; v.as.builtin_fn.func = builtin_range; v.as.builtin_fn.name = "range";
     env_define(interp->global_env, "range", v, true);
 
-    /* Global constants */
     env_define(interp->global_env, "true", vex_bool(true), true);
     env_define(interp->global_env, "false", vex_bool(false), true);
 }
