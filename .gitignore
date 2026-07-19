@@ -4,6 +4,9 @@ vexium.exe
 *.o
 *.obj
 
+# Web IDE & CGI Ignored Files
+web/
+
 # Temporary Logs and Outputs
 *_out.txt
 *_out[0-9].txt
