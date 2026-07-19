@@ -1,0 +1,22 @@
+# Build Artifacts
+vexium.exe
+*.exe
+*.o
+*.obj
+
+# Temporary Logs and Outputs
+*_out.txt
+*_out[0-9].txt
+build*.txt
+ast_*.txt
+final_test.txt
+test_output.txt
+
+# Temporary Directories
+temp-clone/
+
+# IDE / System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,4 +1,4 @@
-# 🔥 Vex v2.0 — Language Evolution Spec
+# 🔥 Vexium v2.0 — Language Evolution Spec
 
 > *"Every feature in v2 exists because another language made a developer cry."*
 > **Solving every pain point Python, C++, Java, Rust, and Go left behind.**
