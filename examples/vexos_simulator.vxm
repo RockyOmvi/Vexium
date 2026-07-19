@@ -1,0 +1,104 @@
+use sys
+use collections
+
+# ── Mock VGA Driver ──
+struct VGADriver:
+    has base_addr: int
+    has width: int
+    has height: int
+
+    can clear_screen(self):
+        display "--- [VGA Screen Cleared] ---"
+
+    can print_string(self, text, color):
+        display "vga(" + str(color) + "): " + text
+
+# ── Mock OS Init Functions ──
+fn setup_gdt():
+    display "OS: GDT initialized."
+
+fn setup_idt():
+    display "OS: IDT initialized."
+
+fn setup_memory_manager():
+    display "OS: Memory manager active."
+
+fn setup_timer(rate):
+    display "OS: Pit timer initialized at " + str(rate) + "Hz"
+
+fn context_switch_to(proc):
+    display "Scheduler: Context switched to " + proc.name
+
+# ── Process struct ──
+struct Process:
+    has name: str
+    has entry_point
+    has priority: int
+    has state: str
+
+# ── Scheduler struct ──
+struct Scheduler:
+    has processes: array
+    has current: int
+
+    can add(self, process):
+        insert(self.processes, len(self.processes), process)
+
+    can run(self):
+        display "Scheduler: Starting scheduling loop..."
+        let cycles be 0
+        while cycles is less than 3:
+            display "--- Scheduler Cycle " + str(cycles + 1) + " ---"
+            if len(self.processes) is greater than 0:
+                let proc be self.processes[self.current]
+                if proc.state is "ready":
+                    proc.state be "running"
+                    context_switch_to(proc)
+                    proc.state be "ready"
+                self.current be (self.current + 1) % len(self.processes)
+            cycles be cycles + 1
+        display "Scheduler: Simulation cycles completed."
+
+# ── System Call Handler ──
+fn on_syscall(syscall_number, arg1, arg2, arg3):
+    display "Syscall triggered: " + str(syscall_number)
+    let _ be syscall_number
+    match syscall_number:
+        1 => display "Syscall write: " + str(arg1)
+        2 => display "Syscall read"
+        3 => display "Syscall exit"
+        4 => display "Syscall fork"
+        5 => display "Syscall exec"
+        _ => display "Unknown syscall: " + str(syscall_number)
+
+# ── Mock Shell Entry Point ──
+fn shell_main():
+    display "Shell process running."
+
+# ── Boot Entry Point ──
+fn kernel_main():
+    let vga be VGADriver(0xB8000, 80, 25)
+    vga.clear_screen()
+    vga.print_string("VexOS v0.1 booting...", 10)  # 10 = green text
+
+    setup_gdt()
+    setup_idt()
+    setup_memory_manager()
+    setup_timer(100)        # 100Hz tick rate
+
+    vga.print_string("Starting scheduler...", 14)   # 14 = yellow
+    let scheduler be Scheduler([], 0)
+
+    # Launch shell as first process
+    let shell be Process("vex_shell", shell_main, 5, "ready")
+    scheduler.add(shell)
+    scheduler.run()
+
+# ── Execution ──
+display "=== Simulating VexOS Kernel Boot ==="
+kernel_main()
+
+display "=== Testing Syscall Dispatcher ==="
+on_syscall(1, "Hello from userspace", 0, 0)
+on_syscall(4, 0, 0, 0)
+on_syscall(99, 0, 0, 0)
