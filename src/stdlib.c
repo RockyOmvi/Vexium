@@ -1,3 +1,6 @@
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 199309L
+#endif
 #ifdef _WIN32
 /* Must rename Windows' TokenType before including our headers */
 #define TokenType WindowsTokenType
