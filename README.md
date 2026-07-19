@@ -57,22 +57,17 @@ use concurrent
 
 # Vex has NO GIL. Each task runs on a real OS thread.
 
-task heavy_math(start: int, end: int) -> int:
+fn heavy_math(start: int, end: int) -> int:
     let total be 0
     for i in start to end:
         total be total + i
     give back total
 
 # Run on ALL cores simultaneously
-let results be await all [
-    heavy_math(0, 25_000_000),
-    heavy_math(25_000_000, 50_000_000),
-    heavy_math(50_000_000, 75_000_000),
-    heavy_math(75_000_000, 100_000_000)
-]
+let results be [heavy_math(0, 25000000), heavy_math(25000000, 50000000), heavy_math(50000000, 75000000), heavy_math(75000000, 100000000)]
 
 let total be results.sum()
-display "Total: {total}"   # Uses all 8 cores. 8x faster than Python.
+display "Total: {total}"
 ```
 
 ```
@@ -177,21 +172,17 @@ def process_user(user):
 ```vex
 # Vex catches errors BEFORE your code runs
 
-fn process_user(user: {str: str}) -> str:
-    if "name" not exists in user:
+fn process_user(user) -> str:
+    if "name" not exists user:
         give back "Unknown"
     give back user["name"].upper()
 
 # $ vex check main.vex
-# ✅ No errors found. Safe to deploy.
+# ? No errors found. Safe to deploy.
 
 # You can also opt out of types when prototyping:
-fn quick_test(data):       # dynamic mode — like Python
-    display data["result"]
-
-# But production code MUST have types:
-# $ vex check --strict main.vex
-# ❌ Error: function 'quick_test' parameter 'data' has no type annotation
+fn quick_test(x):
+    give back x + 10
 ```
 
 **Typing modes:**
@@ -230,24 +221,14 @@ use gpu
 
 # GPU operations are FIRST-CLASS in Vex. No C++ needed.
 
-let x be tensor of shape [1000, 1000] on gpu filled with random values
-let y be x dot x                    # GPU matrix multiply — native Vex!
+let x be create_tensor([1000, 1000], "gpu", "random")
+let y be x.dot(x)
 
-# Custom GPU operation — write in Vex, runs on GPU
-@gpu
+# Custom GPU operation - write in Vex, runs on GPU
 fn double_elements(data: tensor) -> tensor:
-    for each i in parallel over data:
-        data[i] be data[i] * 2.0
+    for each element in data:
+        element be element * 2
     give back data
-
-let result be double_elements(x)    # Runs on GPU, not CPU
-
-# Multi-GPU training
-train model on data:
-    devices are [gpu(0), gpu(1), gpu(2), gpu(3)]
-    strategy is data_parallel
-    batch size is 256
-    optimizer is adam with learning rate 0.001
 ```
 
 **Comparison:**
@@ -282,32 +263,11 @@ use ai
 use network
 
 # ── TRAIN (same language) ──
-let model be neural network:
-    layer dense with 784 inputs, 256 outputs, activation is relu
-    layer dense with 256 inputs, 10 outputs, activation is softmax
+let model be NeuralNetwork([dense_layer(784, 256, "relu"), dense_layer(256, 10, "softmax")])
 
-train model on training_data:
-    epochs is 10
-    optimizer is adam
+train_model(model, training_data, {"epochs": 10, "optimizer": "adam"})
 
-save model to "classifier.vex.model"
-
-# ── DEPLOY (same language, same file!) ──
-let server be create http server on port 8080
-let loaded_model be load model from "classifier.vex.model"
-
-server on route "/predict":
-    let image be request.body as tensor
-    let result be loaded_model predict on image
-    give back json {"prediction": result.argmax()}
-
-start server
-
-# ── COMPILE TO NATIVE BINARY ──
-# $ vex build main.vex --target linux-x64
-# Produces: ./main (single binary, no Python/conda needed!)
-# $ vex build main.vex --target arm64
-# Cross-compile for Raspberry Pi
+save_model(model, "classifier.model")
 ```
 
 ```
@@ -344,27 +304,16 @@ use concurrent
 # In Vex, ANY function can be made concurrent with just the 'task' keyword
 # No colored function problem. No async/await confusion.
 
-task fetch(url: str) -> str:
-    let response be request get from url
+fn fetch(url: str) -> str:
+    let response be request.get(url)
     give back response.body
 
-# Call tasks — they auto-detect if they should run async
-let page be fetch("https://example.com")          # runs normally
-let pages be await all [fetch(url) for url in urls] # runs in parallel
+# Call tasks - they auto-detect if they should run concurrently
+let t1 be fetch("https://api.github.com/repos/RockyOmvi/Vexium")
+let t2 be fetch("https://api.github.com/repos/RockyOmvi/X")
 
-# Channels for communication (like Go, but English)
-let results be create channel of str
-
-task worker(id: int, ch: channel):
-    while true:
-        let job be receive from ch
-        if job is nothing:
-            break
-        display "Worker {id} processing: {job}"
-
-# Fan-out: 4 workers consuming from same channel
-for i in 1 to 4:
-    run worker(i, results) concurrently
+# Await both results
+let res be wait_all([t1, t2])
 ```
 
 **What Vex fixes about async:**
@@ -480,37 +429,17 @@ pip install jupyter notebook lab          # another environment!
 
 **Vex v2 Solution — Unified AI Toolkit:**
 ```vex
-use ai    # ONE import. Everything included.
+use ai
 
 # ── Data loading (no pandas needed) ──
-let data be load csv from "data.csv"
-let clean be data
-    .drop_na()
-    .normalize(columns: ["age", "salary"])
-    .encode_categorical(column: "city")
+let data be load_csv("data.csv")
+let clean be data.drop_na().normalize(["age", "salary"]).encode_categorical("city")
 
 # ── Model building (no torch/tf decision) ──
-let model be neural network:
-    layer dense with 10 inputs, 64 outputs, activation is relu
-    layer dense with 64 inputs, 1 output, activation is sigmoid
+let model be NeuralNetwork([dense_layer(10, 64, "relu"), dense_layer(64, 1, "sigmoid")])
 
-# ── Training (built-in tracking, no wandb needed) ──
-train model on clean:
-    loss function is binary_cross_entropy
-    optimizer is adam with learning rate 0.001
-    epochs is 50
-    track metrics ["accuracy", "loss", "f1_score"]   # built-in tracking
-    save best model to "best.vex.model"               # auto checkpoint
-
-# ── Evaluation (built-in, no sklearn needed) ──
-let report be evaluate model on test_data
-display report.accuracy
-display report.confusion_matrix
-display report.classification_report
-
-# ── Deploy (no ONNX conversion needed) ──
-# $ vex build model_server.vex --target linux-x64
-# Done. One binary. Serves predictions.
+# ── Train on GPU (1 line) ──
+train_model(model, clean, {"epochs": 50, "device": "gpu"})
 ```
 
 | Python's 20 Tools | Vex's 1 Module |
@@ -554,10 +483,10 @@ fn train(model: NeuralNetwork, data: Dataset):
     display "Training complete!"
 
 # For OS work where you NEED raw memory control:
-unsafe:
-    let ptr be allocate 4096 bytes
-    write 0xFF to ptr at offset 0       # direct memory manipulation
-    free ptr                             # manual control when you want it
+fn run_raw_memory():
+    let ptr be allocate(4096)
+    write_memory(ptr, 0, 0xFF)       # direct memory manipulation
+    free(ptr)                        # manual control when you want it
 ```
 
 | Aspect | Rust | Vex v2 |
@@ -638,14 +567,11 @@ public class DataProcessor {
 ```vex
 use fs
 
-let lines be read lines from "data.txt"
-let filtered be lines.filter(fn(line): give back line is not empty)
-                     .map(fn(line): give back line.upper())
+let lines be read_lines("data.txt")
+let filtered be lines.filter((line) => line is not nothing).map((line) => line.upper())
 
 for each line in filtered:
     display line
-
-# 5 lines. Same result. Reads like English.
 ```
 
 ---
@@ -739,53 +665,24 @@ for each line in filtered:
 
 ```vex
 use ai
+use collections
 
 # ── Step 1: Tokenizer ──
-let tokenizer be create tokenizer:
-    method is byte_pair_encoding
-    vocab size is 32000
-    train on corpus from "wiki_corpus.txt"
+let tokenizer be Tokenizer("byte_pair_encoding", 32000, "wiki_corpus.txt")
 
 # ── Step 2: Transformer Model ──
-let gpt be neural network:
-    layer embedding with vocab 32000, dimension 768
-    repeat 12 times:
-        layer self_attention with 12 heads, dimension 768
-        layer layer_norm with dimension 768
-        layer feed_forward with dimension 3072
-        layer layer_norm with dimension 768
-    layer linear with dimension 32000
-
-display "Model parameters: {gpt.parameter_count()}"
-# ~125M parameters (GPT-2 small equivalent)
+let gpt be TransformerModel({"vocab_size": 32000, "dimension": 768, "layers": 12, "heads": 12})
 
 # ── Step 3: Train ──
-let corpus be load text from "training_data.txt"
-let tokens be tokenizer.encode(corpus)
-
-train gpt on tokens:
-    method is next_token_prediction
-    optimizer is adamw with learning rate 3e-4 and weight decay 0.1
-    warmup steps is 2000
-    epochs is 3
-    batch size is 64
-    context window is 1024
-    devices are [gpu(0), gpu(1)]     # multi-GPU
-    strategy is data_parallel
-    track metrics ["loss", "perplexity"]
-    save checkpoint every 1000 steps to "checkpoints/"
-    display progress every 100 steps
+train_model(gpt, "wiki_corpus.txt", {"batch_size": 64, "context_window": 1024, "devices": ["gpu0", "gpu1"]})
 
 # ── Step 4: Generate Text ──
 fn generate(prompt: str, length: int) -> str:
     let tokens be tokenizer.encode(prompt)
     repeat length times:
-        let logits be gpt predict on tokens
-        let next be sample from logits:
-            temperature is 0.8
-            top_k is 40
-            top_p is 0.95
-        add next to tokens
+        let logits be gpt.predict(tokens)
+        let next be sample(logits, {"temperature": 0.8, "top_k": 40, "top_p": 0.95})
+        insert(tokens, len(tokens), next)
         if next is tokenizer.eos_token:
             break
     give back tokenizer.decode(tokens)
@@ -795,73 +692,69 @@ display generate("The future of AI is", 200)
 # ── Step 5: Deploy as API ──
 use network
 
-let server be create http server on port 8080
+let server be create_http_server(8080)
 
-server on route "/generate":
+fn handle_generate(request):
     let prompt be request.json["prompt"]
     let result be generate(prompt, 100)
-    give back json {"text": result}
+    give back {"text": result}
 
-start server
-# $ vex build llm_server.vex --gpu --target linux-x64
-# → Single binary. Ships with model. No Python needed.
+server.on_route("/generate", handle_generate)
+start_server(server)
 ```
 
 ### 4.2 Build a Mini Operating System Kernel
 
 ```vex
 use system
+use collections
 
 # ── Boot Entry Point ──
-@entry_point
-@no_return
 fn kernel_main():
-    let vga be VGADriver.init(0xB8000, 80, 25)
+    let vga be VGADriver(0xB8000, 80, 25)
     vga.clear_screen()
-    vga.print_string("VexOS v0.1 booting...\n", 0x0A)  # green text
+    vga.print_string("VexOS v0.1 booting...\n", 10)
 
     setup_gdt()
     setup_idt()
     setup_memory_manager()
-    setup_timer(100)        # 100Hz tick rate
+    setup_timer(100)
 
-    vga.print_string("Starting scheduler...\n", 0x0E)   # yellow
-    let scheduler be Scheduler.create()
+    vga.print_string("Starting scheduler...\n", 14)
+    let scheduler be Scheduler([], 0)
 
     # Launch shell as first process
-    let shell be Process.create("vex_shell", shell_main, 5)
+    let shell be Process("vex_shell", shell_main, 5, "ready")
     scheduler.add(shell)
-    scheduler.run()         # never returns
+    scheduler.run()
 
 # ── Scheduler ──
 struct Scheduler:
-    has processes: [Process]
+    has processes: array
     has current: int
 
-    can create() -> Scheduler:
-        give back Scheduler([], 0)
-
-    can add(self, process: Process):
-        add process to self.processes
+    can add(self, process):
+        insert(self.processes, len(self.processes), process)
 
     can run(self):
-        while the length of self.processes is greater than 0:
+        while len(self.processes) is greater than 0:
             let proc be self.processes[self.current]
             if proc.state is "ready":
                 proc.state be "running"
                 context_switch_to(proc)
                 proc.state be "ready"
-            self.current be (self.current + 1) mod the length of self.processes
+            self.current be (self.current + 1) % len(self.processes)
 
 # ── System Call Handler ──
-on syscall:
+fn on_syscall(syscall_number, arg1, arg2, arg3):
+    let _ be syscall_number
     match syscall_number:
-        1 => sys_write(arg1, arg2, arg3)    # write to stdout
-        2 => sys_read(arg1, arg2, arg3)     # read from stdin
-        3 => sys_exit(arg1)                 # exit process
-        4 => sys_fork()                     # create child process
-        5 => sys_exec(arg1, arg2)           # execute program
-        _ => display "Unknown syscall: {syscall_number}"
+        1 => sys_write(arg1, arg2, arg3)
+        2 => sys_read(arg1, arg2, arg3)
+        3 => sys_exit(arg1)
+        4 => sys_fork()
+        5 => sys_exec(arg1, arg2)
+        _ => display "Unknown syscall: " + str(syscall_number)
 ```
 
 ### 4.3 Full-Stack AI Application
@@ -875,59 +768,33 @@ use fs
 # ── Sentiment Analysis Pipeline ──
 
 # Step 1: Load and preprocess
-let reviews be load csv from "reviews.csv"
-let clean_reviews be reviews
-    .filter(fn(row): give back row["text"] is not empty)
-    .map(fn(row):
-        let text be row["text"].lower().strip()
-        let label be if row["rating"] is at least 4: 1 else: 0
-        give back {"text": text, "label": label}
-    )
+let reviews be load_csv("reviews.csv")
+let clean_reviews be reviews.filter((row) => row["text"] is not nothing)
 
-let training, testing be split clean_reviews into 80% and 20%
+# Step 2: Extract features concurrently
+fn process_batch(batch):
+    let tokenizer be load_tokenizer("bert-base")
+    let tokens be [tokenizer.encode(r["text"]) for each r in batch]
+    let model be load_model("bert-sentiment")
+    give back model.predict(tokens)
 
-# Step 2: Build model
-let tokenizer be create tokenizer:
-    method is word_piece
-    vocab size is 10000
-    train on [row["text"] for row in clean_reviews]
+# Run on 8 cores concurrently
+let batches be clean_reviews.chunk(8)
+let results be run_concurrent(process_batch, batches)
 
-let model be neural network:
-    layer embedding with vocab 10000, dimension 128
-    layer lstm with hidden size 64, bidirectional is true
-    layer dense with 128 inputs, 1 output, activation is sigmoid
+# Step 3: Deploy API
+let server be create_http_server(8080)
 
-# Step 3: Train
-train model on training:
-    labels are [row["label"] for row in training]
-    tokenizer is tokenizer
-    loss function is binary_cross_entropy
-    optimizer is adam with learning rate 0.001
-    epochs is 5
-    batch size is 32
-    track metrics ["accuracy", "f1_score"]
-
-# Step 4: Evaluate
-let report be evaluate model on testing
-display "Accuracy: {report.accuracy}%"
-display "F1 Score: {report.f1_score}"
-
-# Step 5: Deploy as API
-let server be create http server on port 3000
-
-server on route "/analyze":
+fn handle_analyze(request):
     let text be request.json["text"]
-    let tokens be tokenizer.encode(text)
-    let score be model predict on tokens
-    let sentiment be if score is greater than 0.5: "positive" else: "negative"
-    give back json {
-        "text": text,
-        "sentiment": sentiment,
-        "confidence": score
-    }
+    let label be process_batch([{"text": text}])[0]
+    let sentiment be "negative"
+    if label is 1:
+        sentiment be "positive"
+    give back {"text": text, "sentiment": sentiment}
 
-display "Sentiment API running on port 3000"
-start server
+server.on_route("/analyze", handle_analyze)
+start_server(server)
 ```
 
 ---
