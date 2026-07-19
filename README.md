@@ -986,4 +986,32 @@ start server
 
 ---
 
-> **Full version roadmap**: [prd.md](./prd.md) · **v1 spec**: [language_spec.md](./language_spec.md) · **System design**: [system_design.md](./system_design.md)
+## 7. Getting Started & Editor Support
+
+### 7.1 Installation
+
+#### Download Pre-compiled Binaries
+You can download the latest pre-compiled compiler/interpreter binaries for your platform directly from the **GitHub Releases** page:
+- **Windows**: `vexium.exe`
+- **Linux**: `vexium` (Linux ELF binary)
+- **macOS**: `vexium` (Apple Silicon/Intel binary)
+
+#### Build from Source
+To build the compiler from source, clone this repository and run the Makefile. You will need a C99-compliant C compiler (like `gcc` or `clang`):
+
+- **Windows** (using MinGW):
+  ```powershell
+  mingw32-make
+  ```
+- **macOS & Linux**:
+  ```bash
+  make
+  ```
+
+This produces the `vexium` executable at the root of the repository.
+
+### 7.2 VS Code Extensions
+Get syntax highlighting, auto-completions, and debugger integration with the official extensions:
+
+- [🔥 Vexium Language Support](https://marketplace.visualstudio.com/items?itemName=Vexium.vexium-language)
+- [🐞 Vexium Debugger](https://marketplace.visualstudio.com/items?itemName=Vexium.vexium-debugger)
