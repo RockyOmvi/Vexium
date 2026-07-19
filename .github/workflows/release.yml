@@ -1,0 +1,91 @@
+name: Release Vexium Binaries
+
+on:
+  push:
+    tags:
+      - 'v*' # Triggers when you push a tag starting with 'v' (e.g. v2.0, v2.0.1)
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: vexium-linux-amd64
+            output_name: vexium
+          - os: macos-latest
+            artifact_name: vexium-macos-arm64
+            output_name: vexium
+          - os: windows-latest
+            artifact_name: vexium-windows-amd64.exe
+            output_name: vexium.exe
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Setup MSYS2 (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc make
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: msys2 {0}
+        run: |
+          make
+
+      - name: Build (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          make
+
+      - name: Prepare Artifact
+        shell: bash
+        run: |
+          mv ${{ matrix.output_name }} ${{ matrix.artifact_name }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/vexium-linux-amd64
+            artifacts/vexium-macos-arm64
+            artifacts/vexium-windows-amd64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
