@@ -53,7 +53,7 @@ jobs:
       - name: Build (Unix)
         if: matrix.os != 'windows-latest'
         run: |
-          make TARGET=vexium
+          make TARGET=${{ matrix.output_name }}
 
       - name: Prepare Artifact
         shell: bash
