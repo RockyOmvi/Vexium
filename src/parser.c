@@ -44,7 +44,30 @@ static void expect_newline(Parser* p) {
     if (check(p, TOKEN_NEWLINE) || check(p, TOKEN_EOF)) {
         skip_newlines(p);
     }
+}
 
+static void parser_synchronize(Parser* p) {
+    p->panic_mode = false;
+
+    while (p->current.type != TOKEN_EOF) {
+        if (p->previous.type == TOKEN_NEWLINE) return;
+
+        switch (p->current.type) {
+            case TOKEN_STRUCT:
+            case TOKEN_FN:
+            case TOKEN_LET:
+            case TOKEN_CONST:
+            case TOKEN_FOR:
+            case TOKEN_IF:
+            case TOKEN_WHILE:
+            case TOKEN_GIVE_BACK:
+                return;
+            default:
+                break;
+        }
+
+        advance_token(p);
+    }
 }
 
 static char* token_text(Token tok) {

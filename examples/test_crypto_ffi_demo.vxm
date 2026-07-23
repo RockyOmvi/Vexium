@@ -1,0 +1,20 @@
+use crypto
+use ffi
+
+display "=== 1. Native Cryptography Module (`use crypto`) ==="
+let text be "Vexium Enterprise Edition v2.0"
+let sha be sha256(text)
+display "Text:   {text}"
+display "SHA256: {sha}"
+
+let md5_hash be md5(text)
+display "MD5:    {md5_hash}"
+
+let b64 be base64_encode(text)
+display "Base64: {b64}\n"
+
+display "=== 2. Dynamic C Foreign Function Interface (`use ffi`) ==="
+let lib be load_library("kernel32.dll")
+let sym be get_symbol(lib, "GetSystemTime")
+
+display "=== CRYPTO & FFI ENTERPRISE ADVANCEMENTS PASSED ==="

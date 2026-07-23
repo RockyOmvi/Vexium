@@ -13,6 +13,7 @@ const char* token_type_name(TokenType type) {
         case TOKEN_CONST:        return "CONST";
 
         case TOKEN_FN:           return "FN";
+        case TOKEN_MACRO:        return "MACRO";
         case TOKEN_GIVE_BACK:    return "GIVE_BACK";
         case TOKEN_TASK:         return "TASK";
         case TOKEN_PASS:         return "PASS";

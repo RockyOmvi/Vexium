@@ -1,0 +1,43 @@
+use ai
+use sys
+
+display "=================================================="
+display " 🔥 VEXIUM AI NATIVE ENGINE: MODEL TRAINING DEMO"
+display "=================================================="
+
+# ── 1. Create Tensors for GPU/CPU ──
+display "\n[Step 1] Allocating Input & Weight Tensors..."
+let input_tensor be create_tensor([128, 784], "gpu", "random")
+display "Input tensor initialized (Shape: 128x784)."
+
+# ── 2. Build Deep Neural Network Architecture ──
+display "\n[Step 2] Constructing Deep Neural Network..."
+let layers be [dense_layer(784, 256, "relu"), dense_layer(256, 64, "relu"), dense_layer(64, 10, "softmax")]
+let model be NeuralNetwork(layers)
+display "Architecture built: Input(784) -> Hidden(256, ReLU) -> Hidden(64, ReLU) -> Output(10, Softmax)."
+
+# ── 3. Train Model ──
+display "\n[Step 3] Launching Training Loop..."
+let sample_1 be {"features": [0.8, 0.2, 0.9], "label": 1}
+let sample_2 be {"features": [0.1, 0.7, 0.3], "label": 0}
+let training_data be [sample_1, sample_2]
+
+let params be {"epochs": 5, "batch_size": 32}
+train_model(model, training_data, params)
+
+# ── 4. Perform AI Inference & Predictions ──
+display "[Step 4] Running Predictive Inference..."
+let test_sample_1 be [0.9, 0.8, 0.7]
+let test_sample_2 be [0.1, 0.2, 0.0]
+
+let pred1 be predict(model, test_sample_1)
+let pred2 be predict(model, test_sample_2)
+
+display "Sample 1 Prediction: {pred1}"
+display "Sample 2 Prediction: {pred2}"
+
+# ── 5. Save Model Checkpoint ──
+display "\n[Step 5] Saving Model Checkpoint..."
+save_model(model, "classifier.model")
+
+display "\n✓ Vexium AI Training & Inference Pipeline Completed Successfully!"

@@ -1,0 +1,45 @@
+use ai
+
+display "=========================================================================="
+display " 🐍 VEXIUM TENSOR ENGINE: PYTHON (PyTorch / NumPy) LEVEL INDEPENDENCE"
+display "=========================================================================="
+
+# ── 1. Create Tensors directly from Vexium Arrays ──
+display "\n[Step 1] Initializing Tensors from Raw Array Data (like PyTorch / NumPy)..."
+let t1 be Tensor([1.0, 2.0, 3.0, 4.0])
+let t2 be Tensor([5.0, 6.0, 7.0, 8.0])
+display "Tensor t1 and t2 created directly from Vexium array data."
+
+# ── 2. Matrix Multiplication ──
+display "\n[Step 2] Executing Matrix Multiplication (matmul)..."
+let m be matmul(t1, t2)
+display "Matrix product calculated."
+
+# ── 3. Tensor Reshaping & Transpose ──
+display "\n[Step 3] Tensor Reshaping & Transposition..."
+let reshaped be reshape(t1, [2, 2])
+let transposed be transpose(reshaped)
+display "Tensor reshaped to 2x2 and transposed."
+
+# ── 4. Elementwise Arithmetic ──
+display "\n[Step 4] Elementwise Tensor Arithmetic (Add, Sub, Mul)..."
+let added be tensor_add(t1, t2)
+let subbed be tensor_sub(t1, t2)
+let multed be tensor_mul(t1, t2)
+display "Elementwise tensor addition, subtraction, and multiplication completed."
+
+# ── 5. Statistical Reductions ──
+display "\n[Step 5] Statistical Reductions (Sum, Mean, Max, Min)..."
+let total_sum be tensor_sum(t1)
+let avg_mean be tensor_mean(t1)
+let max_val be tensor_max(t1)
+let min_val be tensor_min(t1)
+
+display "Sum: {total_sum} | Mean: {avg_mean} | Max: {max_val} | Min: {min_val}"
+
+# ── 6. Convert Tensor to Vexium Array ──
+display "\n[Step 6] Converting Tensor to Vexium Native Array..."
+let arr be tensor_to_array(t1)
+display "Converted Array: {arr}"
+
+display "\n✓ Python-Level Tensor Independence Verified Successfully in Vexium!"

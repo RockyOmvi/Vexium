@@ -1,0 +1,11 @@
+fn fn_c(x):
+    give back x / "invalid_type"
+
+fn fn_b(y):
+    give back fn_c(y + 10)
+
+fn fn_a(z):
+    give back fn_b(z * 2)
+
+display "Testing Call Stack Traceback Unwinding..."
+fn_a(5)

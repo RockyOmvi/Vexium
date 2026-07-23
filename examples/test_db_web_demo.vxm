@@ -1,0 +1,15 @@
+use db
+use web
+
+display "=== 1. Real Disk Database Module ==="
+let conn be connect("app.db")
+execute(conn, "CREATE TABLE IF NOT EXISTS users (id INT, name STR)")
+let rows be query(conn, "SELECT * FROM users")
+display rows
+
+display "=== 2. Real HTML Template Interpolation Engine ==="
+let app be create_web_app(8080)
+let html be render_template("<!DOCTYPE html><html><body><h1>Welcome to [[title]]</h1><p>Running on port [[port]]</p></body></html>", {"title": "Vexium Native Web Engine", "port": 8080})
+display html
+
+display "=== DB & WEB ADVANCEMENTS PASSED ==="

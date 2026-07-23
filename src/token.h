@@ -16,6 +16,7 @@ typedef enum {
     TOKEN_CONST,
 
     TOKEN_FN,
+    TOKEN_MACRO,
     TOKEN_GIVE_BACK,
     TOKEN_TASK,
     TOKEN_PASS,

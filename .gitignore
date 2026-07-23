@@ -3,8 +3,17 @@ vexium.exe
 *.exe
 *.o
 *.obj
+*.wasm
 
-# Web IDE & CGI Ignored Files
+# Databases and Runtime Storage
+*.db
+*.wal
+
+# AI Model Files
+*.model
+
+# Fullstack & Web IDE Ignored Files
+fullstack/
 web/
 
 # Temporary Logs and Outputs

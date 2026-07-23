@@ -119,7 +119,7 @@ void vex_print_value(VexValue val) {
 }
 
 char* vex_value_to_string(VexValue val) {
-    char buf[256];
+    char buf[512];
     switch (val.type) {
         case VAL_INT:
             snprintf(buf, sizeof(buf), "%lld", (long long)val.as.int_val);
@@ -134,6 +134,64 @@ char* vex_value_to_string(VexValue val) {
                 val.as.bool_val ? 4 : 5);
         case VAL_NOTHING:
             return vex_strdup("nothing", 7);
+        case VAL_ARRAY: {
+            size_t cap = 256;
+            char* str = (char*)malloc(cap);
+            str[0] = '['; str[1] = '\0';
+            size_t out = 1;
+            if (val.as.array_val) {
+                for (int i = 0; i < val.as.array_val->count; i++) {
+                    if (i > 0) {
+                        while (out + 3 >= cap) { cap *= 2; str = (char*)realloc(str, cap); }
+                        memcpy(str + out, ", ", 2); out += 2;
+                    }
+                    bool is_str = (val.as.array_val->items[i].type == VAL_STRING);
+                    if (is_str) {
+                        while (out + 2 >= cap) { cap *= 2; str = (char*)realloc(str, cap); }
+                        str[out++] = '"';
+                    }
+                    char* s = vex_value_to_string(val.as.array_val->items[i]);
+                    size_t slen = strlen(s);
+                    while (out + slen + 3 >= cap) { cap *= 2; str = (char*)realloc(str, cap); }
+                    memcpy(str + out, s, slen); out += slen;
+                    free(s);
+                    if (is_str) str[out++] = '"';
+                }
+            }
+            str[out++] = ']'; str[out] = '\0';
+            return str;
+        }
+        case VAL_MAP: {
+            size_t cap = 256;
+            char* str = (char*)malloc(cap);
+            str[0] = '{'; str[1] = '\0';
+            size_t out = 1;
+            if (val.as.map_val) {
+                for (int i = 0; i < val.as.map_val->count; i++) {
+                    if (i > 0) {
+                        while (out + 3 >= cap) { cap *= 2; str = (char*)realloc(str, cap); }
+                        memcpy(str + out, ", ", 2); out += 2;
+                    }
+                    const char* k = val.as.map_val->entries[i].key;
+                    size_t klen = strlen(k);
+                    while (out + klen + 6 >= cap) { cap *= 2; str = (char*)realloc(str, cap); }
+                    str[out++] = '"';
+                    memcpy(str + out, k, klen); out += klen;
+                    memcpy(str + out, "\": ", 3); out += 3;
+
+                    bool is_str = (val.as.map_val->entries[i].value.type == VAL_STRING);
+                    if (is_str) str[out++] = '"';
+                    char* s = vex_value_to_string(val.as.map_val->entries[i].value);
+                    size_t slen = strlen(s);
+                    while (out + slen + 3 >= cap) { cap *= 2; str = (char*)realloc(str, cap); }
+                    memcpy(str + out, s, slen); out += slen;
+                    free(s);
+                    if (is_str) str[out++] = '"';
+                }
+            }
+            str[out++] = '}'; str[out] = '\0';
+            return str;
+        }
         default:
             snprintf(buf, sizeof(buf), "<%s>", vex_type_name(val));
             break;
@@ -208,6 +266,30 @@ VexValue* env_get(Environment* env, const char* name) {
         }
     }
     return NULL;
+}
+
+void interpreter_push_frame(Interpreter* interp, const char* fn_name, int line) {
+    if (!interp || interp->call_stack_count >= MAX_CALL_FRAMES) return;
+    interp->call_stack[interp->call_stack_count].fn_name = fn_name ? fn_name : "<anonymous>";
+    interp->call_stack[interp->call_stack_count].file_name = interp->current_file ? interp->current_file : "main.vxm";
+    interp->call_stack[interp->call_stack_count].line = line;
+    interp->call_stack_count++;
+}
+
+void interpreter_pop_frame(Interpreter* interp) {
+    if (!interp || interp->call_stack_count <= 0) return;
+    interp->call_stack_count--;
+}
+
+void interpreter_print_traceback(Interpreter* interp) {
+    if (!interp || interp->call_stack_count == 0) return;
+    fprintf(stderr, "Traceback (most recent call last):\n");
+    for (int i = 0; i < interp->call_stack_count; i++) {
+        fprintf(stderr, "  File \"%s\", line %d, in %s\n",
+            interp->call_stack[i].file_name,
+            interp->call_stack[i].line,
+            interp->call_stack[i].fn_name);
+    }
 }
 
 void env_free(Environment* env) {
@@ -549,6 +631,7 @@ static VexValue eval_binary(Interpreter* interp, ASTNode* node, Environment* env
     if (op == TOKEN_AND) return vex_bool(vex_is_truthy(left) && vex_is_truthy(right));
     if (op == TOKEN_OR)  return vex_bool(vex_is_truthy(left) || vex_is_truthy(right));
 
+    interpreter_print_traceback(interp);
     fprintf(stderr, "Error [line %d]: Unsupported binary operation\n", node->line);
     return vex_nothing();
 }
@@ -608,7 +691,9 @@ static VexValue eval_call(Interpreter* interp, ASTNode* node, Environment* env) 
             }
         }
 
+        interpreter_push_frame(interp, fn->as.fn_decl.name, node->line);
         result = eval(interp, fn->as.fn_decl.body, fn_env);
+        interpreter_pop_frame(interp);
 
         if (interp->signal.type == SIGNAL_RETURN) {
             result = interp->signal.return_value;
@@ -847,7 +932,18 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
             result.type = VAL_MAP;
             result.as.map_val = (ValueMap*)calloc(1, sizeof(ValueMap));
             for (int i = 0; i < node->as.map_literal.count; i++) {
-                VexValue key = eval(interp, node->as.map_literal.entries[i].key, env);
+                ASTNode* k_node = node->as.map_literal.entries[i].key;
+                char* k_str = NULL;
+                if (k_node->type == NODE_IDENTIFIER) {
+                    k_str = vex_strdup(k_node->as.identifier.name, (int)strlen(k_node->as.identifier.name));
+                } else {
+                    VexValue key = eval(interp, k_node, env);
+                    if (key.type == VAL_STRING) {
+                        k_str = vex_strdup(key.as.string_val.data, key.as.string_val.length);
+                    } else {
+                        k_str = vex_value_to_string(key);
+                    }
+                }
                 VexValue val = eval(interp, node->as.map_literal.entries[i].value, env);
                 ValueMap* map = result.as.map_val;
                 if (map->count >= map->capacity) {
@@ -856,7 +952,7 @@ static VexValue eval(Interpreter* interp, ASTNode* node, Environment* env) {
                         sizeof(ValueMapEntry) * map->capacity);
                 }
                 ValueMapEntry* e = &map->entries[map->count++];
-                e->key = vex_value_to_string(key);
+                e->key = k_str;
                 e->value = val;
             }
             return result;

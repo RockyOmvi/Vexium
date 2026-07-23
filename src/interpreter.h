@@ -103,10 +103,25 @@ typedef struct {
 } Signal;
 
 typedef struct {
+    const char* fn_name;
+    const char* file_name;
+    int line;
+} CallFrame;
+
+#define MAX_CALL_FRAMES 64
+
+typedef struct {
     Environment* global_env;
     Signal signal;
     bool had_error;
+    CallFrame call_stack[MAX_CALL_FRAMES];
+    int call_stack_count;
+    const char* current_file;
 } Interpreter;
+
+void interpreter_push_frame(Interpreter* interp, const char* fn_name, int line);
+void interpreter_pop_frame(Interpreter* interp);
+void interpreter_print_traceback(Interpreter* interp);
 
 VexValue vex_int(int64_t val);
 VexValue vex_float(double val);

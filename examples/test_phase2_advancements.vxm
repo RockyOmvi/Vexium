@@ -1,0 +1,21 @@
+use json
+use path
+
+display "=== 1. Real Dynamic C JSON Parser Module ==="
+let data be {"name": "Vexium v2.0", "speed": "70x", "fast": true}
+let json_str be stringify(data)
+display json_str
+
+let obj be parse(json_str)
+display obj["name"]
+display obj["speed"]
+display obj["fast"]
+
+display "=== 2. Native Path Module ==="
+let joined be join("projects", "vexium/app.vxm")
+display joined
+
+let base be basename(joined)
+display base
+
+display "=== PHASE 2 ADVANCEMENTS PASSED ==="

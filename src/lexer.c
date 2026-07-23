@@ -85,6 +85,7 @@ static Keyword keywords[] = {
     {"be",        2,  TOKEN_BE},
     {"const",     5,  TOKEN_CONST},
     {"fn",        2,  TOKEN_FN},
+    {"macro",     5,  TOKEN_MACRO},
     {"task",      4,  TOKEN_TASK},
     {"pass",      4,  TOKEN_PASS},
     {"if",        2,  TOKEN_IF},

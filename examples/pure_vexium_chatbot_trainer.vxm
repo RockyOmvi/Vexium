@@ -1,0 +1,214 @@
+use math
+use string
+use collections
+
+display "=========================================================================="
+display " 🤖 PURE VEXIUM LANGUAGE CHATBOT: ENTIRE TRAINING LOOP WRITTEN IN VEXIUM"
+display "=========================================================================="
+
+fn vex_clamp(val, lo, hi):
+    if val is less than lo:
+        give back lo
+    if val is greater than hi:
+        give back hi
+    give back val
+
+# ── 1. Tokenizer Lookup Function in Pure Vexium ──
+fn get_token_id(word):
+    if word is "hello":
+        give back 0
+    elif word is "hi":
+        give back 1
+    elif word is "who":
+        give back 2
+    elif word is "are":
+        give back 3
+    elif word is "you":
+        give back 4
+    elif word is "i":
+        give back 5
+    elif word is "am":
+        give back 6
+    elif word is "vexium":
+        give back 7
+    elif word is "ai":
+        give back 8
+    elif word is "assistant":
+        give back 9
+    elif word is "how":
+        give back 10
+    elif word is "to":
+        give back 11
+    elif word is "code":
+        give back 12
+    elif word is "use":
+        give back 13
+    elif word is "what":
+        give back 14
+    elif word is "is":
+        give back 15
+    elif word is "speed":
+        give back 16
+    elif word is "fast":
+        give back 17
+    else:
+        give back 0
+
+fn get_token_word(id):
+    let inv_vocab be ["hello", "hi", "who", "are", "you", "i", "am", "vexium", "ai", "assistant", "how", "to", "code", "use", "what", "is", "speed", "fast"]
+    if id is at least 0 and id is less than len(inv_vocab):
+        give back inv_vocab[id]
+    give back "hello"
+
+fn tokenize(text):
+    let clean be lower(text)
+    let words be split(clean, " ")
+    let tokens be []
+    for each w in words:
+        insert(tokens, len(tokens), get_token_id(w))
+    give back tokens
+
+# ── 2. Pure Vexium Neural Network Model Struct & Forward Pass ──
+struct VexiumChatbotModel:
+    has vocab_size: int
+    has embed_dim: int
+    has hidden_weights: array
+    has output_weights: array
+
+    can init(self, v_size, e_dim):
+        self.vocab_size be v_size
+        self.embed_dim be e_dim
+
+        # 2D Weight Matrix in pure Vexium loops
+        let h_w be []
+        for i in 0 to v_size - 1:
+            let row be []
+            for j in 0 to e_dim - 1:
+                insert(row, len(row), (random() * 0.4) - 0.2)
+            insert(h_w, len(h_w), row)
+        self.hidden_weights be h_w
+
+        let o_w be []
+        for i in 0 to e_dim - 1:
+            let row be []
+            for j in 0 to v_size - 1:
+                insert(row, len(row), (random() * 0.4) - 0.2)
+            insert(o_w, len(o_w), row)
+        self.output_weights be o_w
+
+    can forward(self, token_ids):
+        # 1. Embedding lookup in Vexium
+        let hidden be []
+        for d in 0 to self.embed_dim - 1:
+            let sum be 0.0
+            for each tid in token_ids:
+                if tid is at most len(self.hidden_weights) - 1:
+                    let row be self.hidden_weights[tid]
+                    sum be sum + row[d]
+            insert(hidden, len(hidden), sum)
+
+        # 2. Output projection logits
+        let logits be []
+        for v in 0 to self.vocab_size - 1:
+            let dot be 0.0
+            for d in 0 to self.embed_dim - 1:
+                let row be self.output_weights[d]
+                dot be dot + hidden[d] * row[v]
+            insert(logits, len(logits), dot)
+
+        give back logits
+
+    can train_step(self, input_tokens, target_id, learning_rate):
+        let logits be self.forward(input_tokens)
+
+        # Compute Softmax probabilities in pure Vexium
+        let exp_sum be 0.00001
+        let probs be []
+        for each logit in logits:
+            let c_logit be vex_clamp(logit, -10.0, 10.0)
+            let e be exp(c_logit)
+            insert(probs, len(probs), e)
+            exp_sum be exp_sum + e
+
+        for i in 0 to len(probs) - 1:
+            probs[i] be probs[i] / exp_sum
+
+        # Calculate Cross-Entropy Loss
+        let target_prob be probs[target_id]
+        if target_prob is less than 0.0001:
+            target_prob be 0.0001
+        let loss be 0.0 - log(target_prob)
+
+        # Gradient update on weights in pure Vexium
+        for d in 0 to self.embed_dim - 1:
+            let out_row be self.output_weights[d]
+            for v in 0 to self.vocab_size - 1:
+                let grad be probs[v]
+                if v is target_id:
+                    grad be grad - 1.0
+                let cur_w be out_row[v]
+                let step be learning_rate * grad
+                out_row[v] be cur_w - step * 0.05
+
+        give back loss
+
+# ── 3. Dataset of Conversational Dialogue Samples ──
+let sample1 be {"input": "hello who are you", "target": "vexium"}
+let sample2 be {"input": "how to code", "target": "use"}
+let sample3 be {"input": "what is speed", "target": "fast"}
+let dataset be [sample1, sample2, sample3]
+
+# ── 4. Instantiate & Train Model in Pure Vexium Code ──
+display "\n[Step 1] Initializing Vexium Chatbot Weights in Vexium Memory..."
+let bot be VexiumChatbotModel(18, 8)
+
+display "\n[Step 2] Executing Pure Vexium Training Loop across 10 Epochs..."
+display "┌────────┬──────────────┬──────────────────────────────┐"
+display "│ Epoch  │ Loss         │ Optimization Progress        │"
+display "├────────┼──────────────┼──────────────────────────────┤"
+
+let lr be 0.05
+for epoch in 1 to 10:
+    let total_loss be 0.0
+    for each sample in dataset:
+        let in_toks be tokenize(sample["input"])
+        let target_id be get_token_id(sample["target"])
+        let l be bot.train_step(in_toks, target_id, lr)
+        total_loss be total_loss + l
+
+    let avg_loss be total_loss / len(dataset)
+    display "│ Epoch {epoch} │ Loss: {avg_loss} │ Learning Rate: {lr}          │"
+
+display "└────────┴──────────────┴──────────────────────────────┘"
+display "✓ Training Loop Finished in Pure Vexium Code!"
+
+# ── 5. Run Interactive Response Generation in Pure Vexium ──
+display "\n[Step 3] Running Interactive Chatbot Generator in Pure Vexium..."
+
+fn generate_reply(prompt):
+    let tokens be tokenize(prompt)
+    let logits be bot.forward(tokens)
+
+    # Find highest probability token index (Argmax) in pure Vexium
+    let max_idx be 0
+    let max_val be logits[0]
+    for i in 1 to len(logits) - 1:
+        if logits[i] is greater than max_val:
+            max_val be logits[i]
+            max_idx be i
+
+    give back get_token_word(max_idx)
+
+let query1 be "hello who are you"
+let reply1 be generate_reply(query1)
+
+let query2 be "how to code"
+let reply2 be generate_reply(query2)
+
+display "User Query 1:  {query1}"
+display "Chatbot Reply: {reply1}\n"
+
+display "User Query 2:  {query2}"
+display "Chatbot Reply: {reply2}\n"
+
+display "✓ Complete Chatbot Training Pipeline Executed Entirely in Pure Vexium Code!"

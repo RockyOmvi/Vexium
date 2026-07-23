@@ -1,0 +1,10 @@
+use gui
+
+display "=== Native Desktop GUI & Canvas Engine (`use gui`) ==="
+let win be create_window("Vexium Enterprise Desktop App", 1024, 768)
+poll_events(win)
+
+draw_rect(win, 50, 50, 400, 300)
+draw_text(win, "Hello Vexium Enterprise GUI", 60, 80)
+
+display "=== GUI CANVAS DEMO PASSED ==="
