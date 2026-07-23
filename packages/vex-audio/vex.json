@@ -1,0 +1,11 @@
+{
+  "name": "vex-audio",
+  "version": "1.0.0",
+  "description": "Audio waveforms, Mel-Spectrogram extraction, and Speech-to-Text for Vexium",
+  "author": "Vexium Core Team <dev@vexium.org>",
+  "license": "MIT",
+  "entry": "src/lib.vxm",
+  "dependencies": {
+    "vex-tensor": "^1.0.0"
+  }
+}

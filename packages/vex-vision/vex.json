@@ -1,0 +1,12 @@
+{
+  "name": "vex-vision",
+  "version": "1.0.0",
+  "description": "2D Image convolutions (Conv2D), max pooling, and vision backbones for Vexium",
+  "author": "Vexium Core Team <dev@vexium.org>",
+  "license": "MIT",
+  "entry": "src/lib.vxm",
+  "dependencies": {
+    "vex-tensor": "^1.0.0",
+    "vex-nn": "^1.0.0"
+  }
+}

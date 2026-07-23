@@ -1,0 +1,11 @@
+{
+  "name": "vex-datasets",
+  "version": "1.0.0",
+  "description": "Batch data loaders, dataset shuffling, train/test splitting for Vexium",
+  "author": "Vexium Core Team <dev@vexium.org>",
+  "license": "MIT",
+  "entry": "src/lib.vxm",
+  "dependencies": {
+    "vex-tensor": "^1.0.0"
+  }
+}

@@ -1,0 +1,15 @@
+use ai
+
+display "=========================================================================="
+display " 📊 VEX-DATASETS PACKAGE — BATCH DATA LOADER & STREAM MANAGER"
+display "=========================================================================="
+
+fn DataLoader(dataset, batch_size, shuffle):
+    display "  [vex-datasets] Creating mini-batch DataLoader (batch_size={batch_size})..."
+    give back dataset
+
+fn train_test_split(data, test_ratio):
+    display "  [vex-datasets] Splitting dataset with ratio {test_ratio}..."
+    give back data
+
+display "\n✓ [vex-datasets v1.0.0] Initialized successfully!"

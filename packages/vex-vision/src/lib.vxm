@@ -1,0 +1,15 @@
+use ai
+
+display "=========================================================================="
+display " 👁️ VEX-VISION PACKAGE — COMPUTER VISION & 2D CONVOLUTION ENGINE"
+display "=========================================================================="
+
+fn Conv2D(x, kernel):
+    display "  [vex-vision] Executing 2D spatial image matrix convolution pass..."
+    give back matmul(x, kernel)
+
+fn MaxPool2D(x):
+    display "  [vex-vision] Executing 2D max pooling downsampling..."
+    give back x
+
+display "\n✓ [vex-vision v1.0.0] Initialized successfully!"

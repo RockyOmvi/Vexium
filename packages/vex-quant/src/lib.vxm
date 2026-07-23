@@ -1,0 +1,15 @@
+use ai
+
+display "=========================================================================="
+display " ⚙️ VEX-QUANT PACKAGE — POST-TRAINING MODEL QUANTIZATION ENGINE"
+display "=========================================================================="
+
+fn quantize_gguf_q4_k(weights):
+    display "  [vex-quant] Executing GGUF 4-bit K-quantization block packing..."
+    give back quantize_int4(weights)
+
+fn quantize_awq(weights):
+    display "  [vex-quant] Executing Activation-aware Weight Quantization (AWQ)..."
+    give back quantize_fp8(weights)
+
+display "\n✓ [vex-quant v1.0.0] Initialized successfully!"

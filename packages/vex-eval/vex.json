@@ -1,0 +1,11 @@
+{
+  "name": "vex-eval",
+  "version": "1.0.0",
+  "description": "Model evaluation metrics (Perplexity, BLEU, ROUGE, Accuracy, F1-Score) for Vexium",
+  "author": "Vexium Core Team <dev@vexium.org>",
+  "license": "MIT",
+  "entry": "src/lib.vxm",
+  "dependencies": {
+    "vex-tensor": "^1.0.0"
+  }
+}
