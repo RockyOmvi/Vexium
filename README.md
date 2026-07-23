@@ -29,16 +29,25 @@ Before Vexium, developers were forced to juggle four different languages and eco
 
 ---
 
-## ⚡ Comparison Matrix: Vexium vs. Legacy Languages
+## ⚡ System Architecture & Execution Pipeline
 
-| Domain | 🐍 Python | ⚡ C++ | ☕ Java | 🦀 Rust | ⚡ VEXIUM |
+Vexium features a dual-engine architecture designed for flexibility and raw machine performance:
+
+1. **Tree-Walking AST Runtime (`vexium.exe run <file.vxm>`)**: Instant startup script evaluation without compilation delay.
+2. **JIT-Compiled Bytecode VM (`vexium.exe vm <file.vxm>`)**: Lowers bytecode chunks directly to x86_64 machine code instructions via `src/jit.c` and executes via native function pointers (`jit_fn`).
+
+---
+
+## ⚡ Technical Comparison Matrix
+
+| Feature | 🐍 Python | ⚡ C++ | ☕ Java | 🦀 Rust | ⚡ VEXIUM |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Speed** | ❌ 100x Slower | 🟢 Fast | 🟡 Medium (JVM Warmup) | 🟢 Fast | 🟢 **Native C / x86_64 JIT Speed** |
-| **Multi-Core** | ❌ Blocked by GIL | 🟢 Native Threads | 🟢 JVM Threads | 🟢 Native Threads | 🟢 **NO GIL (M:N Lock-Free Fibers)** |
-| **Memory** | ❌ 28-byte int bloat | ⚠️ Manual / Bug Prone | ❌ Large JVM Footprint | 🟢 Borrow Checker | 🟢 **NaN-Boxing (< 15MB RAM)** |
-| **AI Tensors**| 🟢 PyTorch / PyPI | ⚠️ Complex Wrappers | ❌ Weak | ⚠️ Rigid Graphs | 🟢 **First-Class INT4/FP8 Tensors** |
-| **Packaging**| ⚠️ Dependency Hell | ❌ CMake / Make Hell | ⚠️ Maven / Gradle | 🟢 Cargo | 🟢 **VexPI (`vex add <package>`)** |
-| **WASM Target**| ❌ Slow Emscripten | ⚠️ Heavy Toolchain | ❌ Non-Standard | 🟢 Wasm-Bindgen | 🟢 **Built-in LEB128 WASM Emitter** |
+| **Execution Engines** | AST / Bytecode | Native Machine Code | JVM Bytecode | Native Machine Code | 🟢 **AST Tree-Walker + JIT-Compiled VM** |
+| **Garbage Collector** | Reference Counting | Manual / Smart Ptrs | Generational G1/ZGC | Memory Ownership | 🟢 **Generational Nursery Promotion GC** |
+| **Portability** | Cross-Platform | Platform-Dependent | JVM Cross-Platform | Cross-Platform | 🟢 **POSIX (Linux/macOS) & Win32 Native** |
+| **AI Tensors** | PyTorch C Extension | Native Libraries | Third-Party | ArrayFire / Burn | 🟢 **Native Numerical Autograd & FP8 Tensors** |
+| **Packaging** | PyPI / pip | CMake / Conan | Maven / Gradle | Cargo | 🟢 **VexPI Package Index (`vex add`)** |
+| **WASM Target** | Emscripten | Emscripten | Non-Standard | Wasm-Bindgen | 🟢 **Built-in LEB128 WASM Emitter** |
 
 ---
 
