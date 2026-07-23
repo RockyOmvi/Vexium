@@ -1,0 +1,12 @@
+{
+  "name": "vex-nn",
+  "version": "1.0.0",
+  "description": "Neural network layers, activations (ReLU, Softmax, GELU), and loss functions for Vexium",
+  "author": "Vexium Core Team <dev@vexium.org>",
+  "license": "MIT",
+  "entry": "src/lib.vxm",
+  "dependencies": {
+    "vex-tensor": "^1.0.0",
+    "vex-autograd": "^1.0.0"
+  }
+}

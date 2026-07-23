@@ -1,0 +1,9 @@
+{
+  "name": "vex-tokenizers",
+  "version": "1.0.0",
+  "description": "LLM Byte-Pair Encoding (BPE) and WordPiece text tokenizers for Vexium",
+  "author": "Vexium Core Team <dev@vexium.org>",
+  "license": "MIT",
+  "entry": "src/lib.vxm",
+  "dependencies": {}
+}

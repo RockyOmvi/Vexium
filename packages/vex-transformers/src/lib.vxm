@@ -1,0 +1,19 @@
+use ai
+
+display "=========================================================================="
+display " 🤖 VEX-TRANSFORMERS PACKAGE — MULTI-HEAD ATTENTION & LLM BLOCK SUITE"
+display "=========================================================================="
+
+fn MultiHeadAttention(q, k, v):
+    display "  [vex-transformers] Computing scaled dot-product Multi-Head Attention..."
+    let score be matmul(q, k)
+    let weights be softmax(score)
+    give back matmul(weights, v)
+
+fn TransformerBlock(x, attn_weights, ff_weights):
+    display "  [vex-transformers] Processing forward pass through Transformer Block..."
+    let attn_out be MultiHeadAttention(x, x, x)
+    let h1 be layer_linear(attn_out, ff_weights)
+    give back softmax(h1)
+
+display "\n✓ [vex-transformers v1.0.0] Initialized successfully!"

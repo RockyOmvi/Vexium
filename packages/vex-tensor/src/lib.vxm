@@ -1,0 +1,18 @@
+use ai
+
+display "=========================================================================="
+display " 📦 VEX-TENSOR PACKAGE — HIGH-DIMENSIONAL TENSOR ENGINE"
+display "=========================================================================="
+
+fn new_tensor(data):
+    give back Tensor(data)
+
+fn quantize_tensor_fp8(t):
+    display "  [vex-tensor] Quantizing tensor to FP8 precision..."
+    give back quantize_fp8(t)
+
+fn quantize_tensor_int4(t):
+    display "  [vex-tensor] Quantizing tensor to 4-bit integer precision..."
+    give back quantize_int4(t)
+
+display "\n✓ [vex-tensor v1.0.0] Initialized successfully!"

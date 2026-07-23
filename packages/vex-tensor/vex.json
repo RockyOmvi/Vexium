@@ -1,0 +1,9 @@
+{
+  "name": "vex-tensor",
+  "version": "1.0.0",
+  "description": "Multi-dimensional tensor creation, matrix math, FP8/INT4 quantization for Vexium",
+  "author": "Vexium Core Team <dev@vexium.org>",
+  "license": "MIT",
+  "entry": "src/lib.vxm",
+  "dependencies": {}
+}

@@ -1,0 +1,11 @@
+use ai
+
+display "=========================================================================="
+display " 🗣️ VEX-TOKENIZERS PACKAGE — LLM TEXT TOKENIZATION ENGINE"
+display "=========================================================================="
+
+fn encode_bpe(prompt_text):
+    display "  [vex-tokenizers] Encoding LLM prompt text into Byte-Pair Encoding token IDs..."
+    give back tokenize_bpe(prompt_text)
+
+display "\n✓ [vex-tokenizers v1.0.0] Initialized successfully!"

@@ -1,0 +1,11 @@
+use ai
+
+display "=========================================================================="
+display " 🛠️ VEX-OPT PACKAGE — GRADIENT DESCENT OPTIMIZER SUITE"
+display "=========================================================================="
+
+fn AdamOptimizer(params, grads, lr):
+    display "  [vex-opt] Executing Adam parameter update step..."
+    give back adam_step(params, grads, lr)
+
+display "\n✓ [vex-opt v1.0.0] Initialized successfully!"

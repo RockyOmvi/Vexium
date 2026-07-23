@@ -1,0 +1,16 @@
+use ai
+
+display "=========================================================================="
+display " ⚡ VEX-NN PACKAGE — NEURAL NETWORK LAYERS & ACTIVATIONS"
+display "=========================================================================="
+
+fn Linear(x, weights):
+    give back layer_linear(x, weights)
+
+fn Softmax(x):
+    give back softmax(x)
+
+fn CrossEntropyLoss(pred, target):
+    give back cross_entropy(pred, target)
+
+display "\n✓ [vex-nn v1.0.0] Initialized successfully!"

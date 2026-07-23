@@ -1,0 +1,11 @@
+use ai
+
+display "=========================================================================="
+display " 🧠 VEX-AUTOGRAD PACKAGE — AUTOMATIC DIFFERENTIATION ENGINE"
+display "=========================================================================="
+
+fn backward(loss_tensor):
+    display "  [vex-autograd] Traversing computational graph & calculating node gradients..."
+    give back tensor_backward(loss_tensor)
+
+display "\n✓ [vex-autograd v1.0.0] Initialized successfully!"

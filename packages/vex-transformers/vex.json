@@ -1,0 +1,13 @@
+{
+  "name": "vex-transformers",
+  "version": "1.0.0",
+  "description": "Multi-Head Attention mechanisms and Transformer Block architectures for Vexium",
+  "author": "Vexium Core Team <dev@vexium.org>",
+  "license": "MIT",
+  "entry": "src/lib.vxm",
+  "dependencies": {
+    "vex-tensor": "^1.0.0",
+    "vex-nn": "^1.0.0",
+    "vex-tokenizers": "^1.0.0"
+  }
+}
