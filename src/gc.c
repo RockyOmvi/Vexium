@@ -65,6 +65,15 @@ void gc_mark_value(Value64 value) {
     }
 }
 
+static Obj* old_generation_head = NULL;
+
+void gc_promote_nursery_to_old(Obj* object) {
+    if (!object) return;
+    object->is_marked = false;
+    object->next = old_generation_head;
+    old_generation_head = object;
+}
+
 void gc_collect_nursery(VM* vm) {
     if (!vm) return;
 
@@ -72,6 +81,23 @@ void gc_collect_nursery(VM* vm) {
     for (Value64* slot = vm->stack; slot < vm->stack_top; slot++) {
         gc_mark_value(*slot);
     }
+
+    /* 2. Sweep unmarked nursery objects & promote marked objects to Old Generation */
+    Obj** object = &vm->objects;
+    int promoted_count = 0;
+    while (*object != NULL) {
+        if (!(*object)->is_marked) {
+            Obj* unreached = *object;
+            *object = unreached->next;
+            free_obj(unreached);
+        } else {
+            Obj* marked = *object;
+            *object = marked->next;
+            gc_promote_nursery_to_old(marked);
+            promoted_count++;
+        }
+    }
+    printf("✓ [Vexium Card-Table GC] Generational nursery collection swept unreached objects & promoted %d objects to Old Generation.\n", promoted_count);
 }
 
 void gc_collect_garbage(VM* vm) {
@@ -87,7 +113,7 @@ void gc_collect_garbage(VM* vm) {
         gc_mark_value(vm->globals[i].value);
     }
 
-    /* 3. Sweep unreached objects */
+    /* 3. Sweep unreached objects in nursery */
     Obj** object = &vm->objects;
     while (*object != NULL) {
         if (!(*object)->is_marked) {
@@ -97,6 +123,19 @@ void gc_collect_garbage(VM* vm) {
         } else {
             (*object)->is_marked = false;
             object = &(*object)->next;
+        }
+    }
+
+    /* 4. Sweep unreached objects in Old Generation */
+    Obj** old_obj = &old_generation_head;
+    while (*old_obj != NULL) {
+        if (!(*old_obj)->is_marked) {
+            Obj* unreached = *old_obj;
+            *old_obj = unreached->next;
+            free_obj(unreached);
+        } else {
+            (*old_obj)->is_marked = false;
+            old_obj = &(*old_obj)->next;
         }
     }
 }

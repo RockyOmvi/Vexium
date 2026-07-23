@@ -1,5 +1,6 @@
 #ifndef _WIN32
 #define _POSIX_C_SOURCE 199309L
+#include <dlfcn.h>
 #endif
 #ifdef _WIN32
 

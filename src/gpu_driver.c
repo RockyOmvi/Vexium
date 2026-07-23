@@ -48,7 +48,7 @@ typedef cl_int (*clBuildProgram_t)(cl_program, cl_uint, const cl_device_id*, con
 typedef cl_kernel (*clCreateKernel_t)(cl_program, const char*, cl_int*);
 
 typedef struct {
-    HMODULE library_handle;
+    void* library_handle;
     clGetPlatformIDs_t clGetPlatformIDs;
     clGetDeviceIDs_t clGetDeviceIDs;
     clCreateContext_t clCreateContext;

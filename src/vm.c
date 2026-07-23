@@ -1,4 +1,5 @@
 #include "vm.h"
+#include "jit.h"
 
 void vm_init(VM* vm) {
     vm->chunk = NULL;
@@ -62,6 +63,18 @@ static Value64 vm_get_global(VM* vm, const char* name) {
 InterpretResult vm_run(VM* vm, Chunk* chunk) {
     vm->chunk = chunk;
     vm->ip = vm->chunk->code;
+
+    /* JIT HOT-PATH EXECUTION WIRING */
+    if (chunk && chunk->count > 0) {
+        JITCompiler jit;
+        jit_init(&jit);
+        JITFunction jit_fn = jit_compile_chunk(&jit, chunk);
+        if (jit_fn) {
+            printf("⚡ [Vexium JIT Runtime] Lowered bytecode chunk (%d bytecodes) to x86_64 native machine code.\n", chunk->count);
+            jit_fn((uint64_t*)vm->stack, (uint64_t*)vm->globals);
+        }
+        jit_free(&jit);
+    }
 
 #define READ_BYTE() (*vm->ip++)
 #define READ_SHORT() (vm->ip += 2, (uint16_t)((vm->ip[-2] << 8) | vm->ip[-1]))

@@ -46,6 +46,7 @@ ObjTensor* allocate_tensor(int* shape, int ndim) {
     }
     tensor->size = total_size;
     tensor->data = (float*)calloc(total_size, sizeof(float));
+    tensor->grad = (float*)calloc(total_size, sizeof(float));
     return tensor;
 }
 

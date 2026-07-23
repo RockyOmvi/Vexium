@@ -57,7 +57,7 @@ static VexValue net_request_get(VexValue* args, int argc) {
         struct sockaddr_in server_addr;
         memset(&server_addr, 0, sizeof(server_addr));
         server_addr.sin_family = AF_INET;
-        server_addr.sin_port = htons((u_short)port);
+        server_addr.sin_port = htons((uint16_t)port);
         memcpy(&server_addr.sin_addr, he->h_addr_list[0], he->h_length);
 
         if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) == 0) {
