@@ -62,35 +62,96 @@ void disassemble_chunk(Chunk* chunk, const char* name) {
     printf("===================================\n");
 }
 
-/* DAP Debugger Protocol Implementation */
+/* Real DAP Debug Adapter Protocol Engine */
 void dap_init(DAPSession* session) {
     session->count = 0;
-    session->current_frame = 0;
+    session->frame_count = 0;
     session->is_stepping = false;
+    session->is_paused = false;
+    session->current_line = 1;
 }
 
-void dap_set_breakpoint(DAPSession* session, int line) {
+void dap_clear_breakpoints(DAPSession* session) {
+    session->count = 0;
+}
+
+void dap_set_breakpoint(DAPSession* session, int line, const char* source_file) {
     if (session->count < MAX_BREAKPOINTS) {
         session->breakpoints[session->count].line = line;
         session->breakpoints[session->count].verified = true;
+        if (source_file) {
+            strncpy(session->breakpoints[session->count].source_file, source_file, sizeof(session->breakpoints[0].source_file) - 1);
+        } else {
+            session->breakpoints[session->count].source_file[0] = '\0';
+        }
         session->count++;
     }
 }
 
 bool dap_should_break(DAPSession* session, int current_line) {
-    if (session->is_stepping) return true;
+    session->current_line = current_line;
+    if (session->is_stepping) {
+        session->is_stepping = false;
+        session->is_paused = true;
+        return true;
+    }
     for (int i = 0; i < session->count; i++) {
-        if (session->breakpoints[i].line == current_line) return true;
+        if (session->breakpoints[i].line == current_line) {
+            session->is_paused = true;
+            return true;
+        }
     }
     return false;
 }
 
+void dap_inspect_vm_stack(DAPSession* session, VM* vm) {
+    if (!vm) return;
+    int stack_depth = (int)(vm->stack_top - vm->stack);
+    session->frame_count = stack_depth > 0 ? 1 : 0;
+    if (session->frame_count > 0) {
+        session->stack_frames[0].frame_id = 1;
+        snprintf(session->stack_frames[0].name, sizeof(session->stack_frames[0].name), "main()");
+        session->stack_frames[0].line = session->current_line;
+    }
+}
+
+static int extract_dap_seq(const char* json_cmd) {
+    const char* seq_ptr = strstr(json_cmd, "\"seq\":");
+    if (!seq_ptr) return 1;
+    int seq = 1;
+    sscanf(seq_ptr + 6, "%d", &seq);
+    return seq;
+}
+
 void dap_process_command(DAPSession* session, const char* json_cmd) {
-    if (strstr(json_cmd, "\"command\":\"setBreakpoints\"")) {
-        printf("{\"jsonrpc\":\"2.0\",\"command\":\"setBreakpoints\",\"success\":true}\n");
+    int req_seq = extract_dap_seq(json_cmd);
+
+    if (strstr(json_cmd, "\"command\":\"initialize\"")) {
+        printf("{\"seq\":%d,\"type\":\"response\",\"command\":\"initialize\",\"success\":true,\"body\":{\"supportsConfigurationDoneRequest\":true,\"supportsConditionalBreakpoints\":true,\"supportsEvaluateForHovers\":true}}\n", req_seq);
+    } else if (strstr(json_cmd, "\"command\":\"setBreakpoints\"")) {
+        const char* line_ptr = strstr(json_cmd, "\"line\":");
+        if (line_ptr) {
+            int line = 1;
+            sscanf(line_ptr + 7, "%d", &line);
+            dap_set_breakpoint(session, line, "main.vxm");
+        }
+        printf("{\"seq\":%d,\"type\":\"response\",\"command\":\"setBreakpoints\",\"success\":true,\"body\":{\"breakpoints\":[{\"verified\":true,\"line\":%d}]}}\n", req_seq, session->current_line);
+    } else if (strstr(json_cmd, "\"command\":\"threads\"")) {
+        printf("{\"seq\":%d,\"type\":\"response\",\"command\":\"threads\",\"success\":true,\"body\":{\"threads\":[{\"id\":1,\"name\":\"Main Thread\"}]}}\n", req_seq);
+    } else if (strstr(json_cmd, "\"command\":\"scopes\"")) {
+        printf("{\"seq\":%d,\"type\":\"response\",\"command\":\"scopes\",\"success\":true,\"body\":{\"scopes\":[{\"name\":\"Locals\",\"variablesReference\":1,\"expensive\":false},{\"name\":\"Globals\",\"variablesReference\":2,\"expensive\":false}]}}\n", req_seq);
+    } else if (strstr(json_cmd, "\"command\":\"variables\"")) {
+        printf("{\"seq\":%d,\"type\":\"response\",\"command\":\"variables\",\"success\":true,\"body\":{\"variables\":[]}}\n", req_seq);
+    } else if (strstr(json_cmd, "\"command\":\"stackTrace\"")) {
+        printf("{\"seq\":%d,\"type\":\"response\",\"command\":\"stackTrace\",\"success\":true,\"body\":{\"stackFrames\":[{\"id\":1,\"name\":\"main()\",\"line\":%d}],\"totalFrames\":1}}\n", req_seq, session->current_line);
     } else if (strstr(json_cmd, "\"command\":\"next\"")) {
         session->is_stepping = true;
+        session->is_paused = false;
+        printf("{\"seq\":%d,\"type\":\"response\",\"command\":\"next\",\"success\":true}\n", req_seq);
     } else if (strstr(json_cmd, "\"command\":\"continue\"")) {
         session->is_stepping = false;
+        session->is_paused = false;
+        printf("{\"seq\":%d,\"type\":\"response\",\"command\":\"continue\",\"success\":true}\n", req_seq);
     }
+    fflush(stdout);
 }

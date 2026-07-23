@@ -32,3 +32,5 @@ temp-clone/
 .idea/
 .DS_Store
 Thumbs.db
+.vex_modules/
+.vex_cache/

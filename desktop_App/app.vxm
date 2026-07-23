@@ -1,0 +1,34 @@
+use web
+use db
+use file
+use path
+use json
+
+display "=========================================================================="
+display " 📝 VEXIUM DESKTOP APP — TODO LIST & STICKY NOTES ENGINE"
+display "=========================================================================="
+
+display "\n[Step 1] Connecting to Vexium Database 'vexium_desktop.db'..."
+let conn be connect("vexium_desktop.db")
+
+display "\n[Step 2] Reading Vexium Desktop App Front-End Assets..."
+let index_html be read_file("desktop_App/index.html")
+let css_style be read_file("desktop_App/style.css")
+let app_js be read_file("desktop_App/app.js")
+
+let len_index be len(index_html)
+let len_css be len(css_style)
+let len_js be len(app_js)
+
+display "✓ Index HTML Template Loaded ({len_index} bytes)"
+display "✓ Glassmorphism CSS Design System Loaded ({len_css} bytes)"
+display "✓ App Logic JavaScript Engine Loaded ({len_js} bytes)"
+
+display "\n[Step 3] Initializing Vexium Desktop Application Web Framework on Port 8090..."
+let app be create_web_app(8090)
+
+display "\n✓ Starting Live Desktop Socket Listener on Port 8090..."
+display "  Open Browser/Desktop View: http://localhost:8090/"
+start_server(8090)
+
+display "\n✓ Powered 100% by Vexium Native Engine!"

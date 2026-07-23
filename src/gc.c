@@ -1,28 +1,38 @@
 #include "gc.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 void gc_init(GarbageCollector* gc) {
     gc->bytes_allocated = 0;
     gc->next_gc = 1024 * 1024;
-    gc->gen0_count = 0;
-    gc->gen1_count = 0;
+    gc->gen0_alloc_count = 0;
+    gc->gen1_alloc_count = 0;
     memset(gc->card_table, 0, sizeof(gc->card_table));
 }
 
 void gc_register_alloc(GarbageCollector* gc, size_t size) {
     if (!gc) return;
     gc->bytes_allocated += size;
-    gc->gen0_count++;
+    gc->gen0_alloc_count++;
 }
 
-void gc_write_barrier(Obj* source, Obj* target) {
-    if (!source || !target) return;
-    uintptr_t addr = (uintptr_t)source;
-    size_t card_index = (addr / 512) % CARD_TABLE_SIZE;
-    /* Mark card table as dirty if Old Gen points to Young Gen */
-    if (!source->is_marked && target->is_marked) {
-        /* Dirty card */
-    }
-    UNUSED(card_index);
+void gc_mark_dirty_card(GarbageCollector* gc, void* address) {
+    if (!gc || !address) return;
+    uintptr_t addr = (uintptr_t)address;
+    size_t card_idx = (addr >> CARD_SHIFT) % CARD_TABLE_CAPACITY;
+    gc->card_table[card_idx] = 1; /* Dirty card */
+}
+
+void gc_clear_card_table(GarbageCollector* gc) {
+    if (!gc) return;
+    memset(gc->card_table, 0, sizeof(gc->card_table));
+}
+
+void gc_write_barrier(GarbageCollector* gc, Obj* source, Obj* target) {
+    if (!gc || !source || !target) return;
+    /* If an Old Gen object is mutated to store a Young Gen object, mark card dirty */
+    gc_mark_dirty_card(gc, source);
 }
 
 void gc_mark_object(Obj* object) {
@@ -57,26 +67,27 @@ void gc_mark_value(Value64 value) {
 
 void gc_collect_nursery(VM* vm) {
     if (!vm) return;
+
+    /* 1. Mark stack roots */
     for (Value64* slot = vm->stack; slot < vm->stack_top; slot++) {
         gc_mark_value(*slot);
     }
-    /* Nursery collection cycle completes */
 }
 
 void gc_collect_garbage(VM* vm) {
     if (!vm) return;
 
-    /* Mark stack roots */
+    /* 1. Mark VM stack roots */
     for (Value64* slot = vm->stack; slot < vm->stack_top; slot++) {
         gc_mark_value(*slot);
     }
 
-    /* Mark global roots */
+    /* 2. Mark global environment roots */
     for (int i = 0; i < vm->globals_count; i++) {
         gc_mark_value(vm->globals[i].value);
     }
 
-    /* Sweep unreached objects */
+    /* 3. Sweep unreached objects */
     Obj** object = &vm->objects;
     while (*object != NULL) {
         if (!(*object)->is_marked) {

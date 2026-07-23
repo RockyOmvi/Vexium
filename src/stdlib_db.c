@@ -107,30 +107,6 @@ static VexValue db_query(VexValue* args, int argc) {
         fclose(f);
     }
 
-    if (arr->count == 0) {
-        VexValue row;
-        row.type = VAL_MAP;
-        row.as.map_val = (ValueMap*)calloc(1, sizeof(ValueMap));
-        ValueMap* m = row.as.map_val;
-        m->capacity = 3;
-        m->entries = (ValueMapEntry*)malloc(sizeof(ValueMapEntry) * 3);
-
-        m->entries[0].key = vex_strdup("query", 5);
-        m->entries[0].value = vex_string(sql, (int)strlen(sql));
-
-        m->entries[1].key = vex_strdup("records_found", 13);
-        m->entries[1].value = vex_int(0);
-
-        m->entries[2].key = vex_strdup("db_file", 7);
-        m->entries[2].value = vex_string(db_path, (int)strlen(db_path));
-        m->count = 3;
-
-        arr->capacity = 1;
-        arr->items = (VexValue*)malloc(sizeof(VexValue));
-        arr->items[0] = row;
-        arr->count = 1;
-    }
-
     return res;
 }
 

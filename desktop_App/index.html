@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vexium Studio — Todo & Sticky Notes Workspace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+    <!-- App Header & Navigation -->
+    <header class="app-header">
+        <div class="brand">
+            <div class="brand-logo">V</div>
+            <div>
+                <h1>Vexium Workspace</h1>
+                <span class="subtitle">Desktop Todo & Sticky Notes Engine</span>
+            </div>
+        </div>
+
+        <nav class="view-switcher">
+            <button class="nav-btn active" id="btnViewTodo" onclick="switchView('todo')">
+                <span>📝</span> Todo List
+            </button>
+            <button class="nav-btn" id="btnViewNotes" onclick="switchView('notes')">
+                <span>📌</span> Sticky Notes
+            </button>
+        </nav>
+
+        <div class="status-badge">
+            <span class="status-dot"></span> Vexium Engine Live
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-container">
+
+        <!-- ================= TODO LIST VIEW ================= -->
+        <section id="viewTodo" class="view-panel active-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Task Management Center</h2>
+                    <p>Organize, track, and complete your high-impact development tasks.</p>
+                </div>
+
+                <div class="stats-counter">
+                    <div class="stat-card">
+                        <span class="stat-num" id="statCompleted">0</span>
+                        <span class="stat-label">Done</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-num" id="statPending">0</span>
+                        <span class="stat-label">Pending</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Task Creator Card -->
+            <div class="glass-card task-creator">
+                <div class="input-row">
+                    <input type="text" id="taskInput" placeholder="What needs to be accomplished today?" onkeypress="handleTaskKey(event)">
+                    
+                    <select id="taskPriority">
+                        <option value="high">🔴 High Priority</option>
+                        <option value="medium" selected>🟡 Medium</option>
+                        <option value="low">🟢 Low</option>
+                    </select>
+
+                    <button class="btn btn-primary" onclick="addTask()">
+                        <span>➕</span> Add Task
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-container">
+                <div class="progress-header">
+                    <span>Overall Completion Rate</span>
+                    <span id="progressText">0%</span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill" id="progressBar" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- Filter Tabs -->
+            <div class="filter-tabs">
+                <button class="tab-btn active" onclick="setFilter('all', this)">All Tasks</button>
+                <button class="tab-btn" onclick="setFilter('active', this)">Active</button>
+                <button class="tab-btn" onclick="setFilter('completed', this)">Completed</button>
+                <button class="tab-btn" onclick="setFilter('high', this)">High Priority</button>
+            </div>
+
+            <!-- Todo Items List -->
+            <div class="todo-list" id="todoList">
+                <!-- Dynamic Tasks Rendered Here -->
+            </div>
+        </section>
+
+
+        <!-- ================= STICKY NOTES VIEW ================= -->
+        <section id="viewNotes" class="view-panel hidden-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Interactive Sticky Notes Canvas</h2>
+                    <p>Pin ideas, code snippets, and quick reminders across your canvas.</p>
+                </div>
+
+                <button class="btn btn-cyan" onclick="createStickyNote()">
+                    <span>📌</span> New Sticky Note
+                </button>
+            </div>
+
+            <!-- Sticky Note Controls & Color Palette -->
+            <div class="glass-card color-toolbar">
+                <span style="font-weight: 500; font-size: 0.9rem; color: var(--text-muted);">Select Theme:</span>
+                <div class="color-options">
+                    <button class="color-btn theme-amber active" onclick="setSelectedTheme('amber', this)"></button>
+                    <button class="color-btn theme-cyan" onclick="setSelectedTheme('cyan', this)"></button>
+                    <button class="color-btn theme-magenta" onclick="setSelectedTheme('magenta', this)"></button>
+                    <button class="color-btn theme-emerald" onclick="setSelectedTheme('emerald', this)"></button>
+                    <button class="color-btn theme-purple" onclick="setSelectedTheme('purple', this)"></button>
+                </div>
+            </div>
+
+            <!-- Sticky Notes Grid/Canvas -->
+            <div class="notes-grid" id="notesGrid">
+                <!-- Dynamic Sticky Notes Rendered Here -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer Engine Badge -->
+    <footer class="app-footer">
+        Powered by <strong>Vexium v3.0 Native Engine</strong> &bull; Embedded WAL Log Persistence enabled
+    </footer>
+
+    <script src="/app.js"></script>
+</body>
+</html>

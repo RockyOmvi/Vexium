@@ -1,0 +1,7 @@
+{
+  "name": "vex-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "live-package": "^1.0.0"
+  }
+}

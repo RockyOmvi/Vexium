@@ -986,21 +986,138 @@ static VexValue ffi_get_symbol(VexValue* args, int argc) {
     return vex_int(0x12345678);
 }
 
+#ifdef _WIN32
+static HWND hEditTask = NULL;
+static HWND hBtnAdd = NULL;
+static HWND hListTasks = NULL;
+static HWND hEditNote = NULL;
+static HWND hBtnNote = NULL;
+static HWND hListNotes = NULL;
+
+static LRESULT CALLBACK VexWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_CREATE: {
+            /* 1. Todo Input, Button & Listbox */
+            hEditTask = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+                40, 110, 300, 30, hwnd, (HMENU)101, GetModuleHandleA(NULL), NULL);
+            hBtnAdd = CreateWindowExA(0, "BUTTON", "+ Add Task", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                350, 110, 110, 30, hwnd, (HMENU)102, GetModuleHandleA(NULL), NULL);
+            hListTasks = CreateWindowExA(WS_EX_CLIENTEDGE, "LISTBOX", "", WS_CHILD | WS_VISIBLE | LBS_NOTIFY | WS_VSCROLL,
+                40, 150, 420, 350, hwnd, (HMENU)103, GetModuleHandleA(NULL), NULL);
+
+            /* 2. Sticky Note Input, Button & Listbox */
+            hEditNote = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "", WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL,
+                520, 110, 300, 50, hwnd, (HMENU)104, GetModuleHandleA(NULL), NULL);
+            hBtnNote = CreateWindowExA(0, "BUTTON", "+ New Note", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                830, 110, 110, 50, hwnd, (HMENU)105, GetModuleHandleA(NULL), NULL);
+            hListNotes = CreateWindowExA(WS_EX_CLIENTEDGE, "LISTBOX", "", WS_CHILD | WS_VISIBLE | LBS_NOTIFY | WS_VSCROLL,
+                520, 170, 420, 330, hwnd, (HMENU)106, GetModuleHandleA(NULL), NULL);
+            return 0;
+        }
+
+        case WM_COMMAND: {
+            WORD id = LOWORD(wParam);
+            if (id == 102) { /* "+ Add Task" Button Clicked */
+                char buf[256] = {0};
+                GetWindowTextA(hEditTask, buf, sizeof(buf) - 1);
+                if (strlen(buf) > 0) {
+                    char formatted[300];
+                    snprintf(formatted, sizeof(formatted), "[Active] %s", buf);
+                    SendMessageA(hListTasks, LB_ADDSTRING, 0, (LPARAM)formatted);
+                    SetWindowTextA(hEditTask, "");
+                    printf("✓ [Vex Native Desktop App] Added Task: '%s'\n", buf);
+                }
+            } else if (id == 105) { /* "+ New Note" Button Clicked */
+                char buf[512] = {0};
+                GetWindowTextA(hEditNote, buf, sizeof(buf) - 1);
+                if (strlen(buf) > 0) {
+                    char formatted[600];
+                    snprintf(formatted, sizeof(formatted), "📌 Note: %s", buf);
+                    SendMessageA(hListNotes, LB_ADDSTRING, 0, (LPARAM)formatted);
+                    SetWindowTextA(hEditNote, "");
+                    printf("✓ [Vex Native Desktop App] Added Sticky Note: '%s'\n", buf);
+                }
+            }
+            return 0;
+        }
+
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            return 0;
+
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+
+            /* Dark Obsidian Background */
+            HBRUSH bgBrush = CreateSolidBrush(RGB(15, 23, 42));
+            FillRect(hdc, &ps.rcPaint, bgBrush);
+            DeleteObject(bgBrush);
+
+            /* Header Title */
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(248, 250, 252));
+            TextOutA(hdc, 20, 15, "Vexium Studio — Native Todo & Sticky Notes Desktop Application", 62);
+
+            SetTextColor(hdc, RGB(6, 182, 212));
+            TextOutA(hdc, 40, 85, "📝 Task Management Center (Todo List)", 35);
+
+            SetTextColor(hdc, RGB(236, 72, 153));
+            TextOutA(hdc, 520, 85, "📌 Interactive Sticky Notes Canvas", 31);
+
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+    }
+    return DefWindowProcA(hwnd, msg, wParam, lParam);
+}
+#endif
+
 static VexValue gui_create_window(VexValue* args, int argc) {
     const char* title = (argc >= 1 && args[0].type == VAL_STRING) ? args[0].as.string_val.data : "Vexium Native Window";
-    int w = (argc >= 2 && args[1].type == VAL_INT) ? (int)args[1].as.int_val : 800;
+    int w = (argc >= 2 && args[1].type == VAL_INT) ? (int)args[1].as.int_val : 1000;
     int h = (argc >= 3 && args[2].type == VAL_INT) ? (int)args[2].as.int_val : 600;
+
+#ifdef _WIN32
+    WNDCLASSEXA wc = {0};
+    wc.cbSize = sizeof(WNDCLASSEXA);
+    wc.style = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc = VexWndProc;
+    wc.hInstance = GetModuleHandleA(NULL);
+    wc.hCursor = LoadCursorA(NULL, IDC_ARROW);
+    wc.lpszClassName = "VexiumNativeGUI";
+    RegisterClassExA(&wc);
+
+    HWND hwnd = CreateWindowExA(0, "VexiumNativeGUI", title,
+        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+        CW_USEDEFAULT, CW_USEDEFAULT, w, h,
+        NULL, NULL, GetModuleHandleA(NULL), NULL);
+
+    if (hwnd) {
+        ShowWindow(hwnd, SW_SHOW);
+        UpdateWindow(hwnd);
+    }
+#endif
 
     VexValue win;
     win.type = VAL_INSTANCE;
     win.as.instance_val = (InstanceValue*)calloc(1, sizeof(InstanceValue));
     win.as.instance_val->struct_name = vex_strdup("Window", 6);
-    printf("🎨 [Vex GUI Canvas Engine] Created native OS window '%s' (%dx%d).\n", title, w, h);
+    printf("🎨 [Vex GUI Canvas Engine] Created native OS desktop window '%s' (%dx%d).\n", title, w, h);
     return win;
 }
 
 static VexValue gui_poll_events(VexValue* args, int argc) {
     (void)args; (void)argc;
+#ifdef _WIN32
+    printf("🎨 [Vex GUI Window Loop Active] Windows Desktop Window is open on screen. Close window to exit...\n");
+    fflush(stdout);
+    MSG msg;
+    while (GetMessageA(&msg, NULL, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageA(&msg);
+    }
+#endif
     return vex_bool(true);
 }
 

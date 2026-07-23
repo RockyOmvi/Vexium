@@ -41,8 +41,8 @@ struct Fiber {
 
 typedef struct {
     Fiber* tasks[WORK_STEAL_CAPACITY];
-    int head;
-    int tail;
+    volatile int head;
+    volatile int tail;
 } WorkStealingQueue;
 
 typedef struct {
