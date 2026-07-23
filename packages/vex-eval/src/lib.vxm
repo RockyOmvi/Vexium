@@ -1,19 +1,16 @@
 use ai
 
 display "=========================================================================="
-display " 📊 VEX-EVAL PACKAGE — MODEL EVALUATION & METRICS ENGINE"
+display " 📊 VEX-EVAL PACKAGE — DYNAMIC MODEL EVALUATION & METRICS ENGINE"
 display "=========================================================================="
 
-fn accuracy_score(y_pred, y_true):
-    display "  [vex-eval] Calculating accuracy score metric..."
-    give back 0.95
+fn accuracy(y_pred, y_true):
+    give back accuracy_score(y_pred, y_true)
 
-fn bleu_score(hypothesis, reference):
-    display "  [vex-eval] Calculating BLEU n-gram translation score..."
-    give back 0.88
+fn bleu(hypothesis, reference):
+    give back bleu_score(hypothesis, reference)
 
 fn perplexity(loss):
-    display "  [vex-eval] Calculating LLM language model perplexity PPL=exp(loss)..."
     give back exp(loss)
 
 display "\n✓ [vex-eval v1.0.0] Initialized successfully!"
